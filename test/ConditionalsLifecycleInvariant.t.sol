@@ -38,11 +38,17 @@ contract LifecycleHandler is Test {
     mapping(uint256 => address) public signerAtCreation;
     mapping(uint256 => uint8) public finalStatus;
     mapping(uint256 => uint8[2]) internal seenAnswers;
+    /// @dev stakeOf[market][trader][world][side].
+    mapping(uint256 => uint256[2][2][4]) internal stakeOf;
+    /// @dev What each third party has withdrawn from `owed`.
+    mapping(address => uint256) public withdrawnOwed;
 
     bool public forgedAccepted;
     bool public voidPaidWrong;
     bool public reopened;
     bool public answerChanged;
+    bool public winnerShortPaid;
+    bool public owedPaidWrong;
     uint256 public forgeries;
 
     constructor(Conditionals c_, MockIMD imd_, MockIntake intake_, address owner_, address builder_) {
@@ -80,6 +86,7 @@ contract LifecycleHandler is Test {
         vm.prank(traders[t]);
         c.stake(id, world % 2, side % 2, a);
         deposited[id][t] += a;
+        stakeOf[id][t][world % 2][side % 2] += a;
         _observe();
     }
 
@@ -149,7 +156,16 @@ contract LifecycleHandler is Test {
         if (amount == 0) return;
         vm.prank(traders[t]);
         uint256 got = c.claim(id);
-        if (c.getMarket(id).status == Conditionals.Status.Voided && got != deposited[id][t]) voidPaidWrong = true;
+        Conditionals.Market memory m = c.getMarket(id);
+        if (m.status == Conditionals.Status.Voided && got != deposited[id][t]) voidPaidWrong = true;
+        if (m.status == Conditionals.Status.Settled) {
+            // At least: the other world in full, and in the world that happened the whole stake if refunded, else
+            // the winning side's stake (the fee is capped at the losing pool, so a winner never nets a loss).
+            uint256[2][2] memory s = stakeOf[id][t];
+            uint256 floor = s[1 - m.world][0] + s[1 - m.world][1];
+            floor += m.worldRefunded ? s[m.world][0] + s[m.world][1] : s[m.world][m.winningSide];
+            if (got < floor) winnerShortPaid = true;
+        }
         claimedOf[id] += got;
         _observe();
     }
@@ -182,6 +198,26 @@ contract LifecycleHandler is Test {
         _observe();
     }
 
+    /// @dev IMD can refuse transfers to a blocked address; a blocked burn address or fee recipient must not stop
+    ///      settlement, and what it was due waits in `owed`.
+    function setBlocked(uint8 who, bool isBlocked) external {
+        address a = _third(who);
+        imd.setBlocked(a, isBlocked);
+        _observe();
+    }
+
+    function withdrawOwed(uint8 who) external {
+        address a = _third(who);
+        uint256 due = c.owed(a);
+        if (due == 0 || imd.blocked(a)) return;
+        uint256 before = imd.balanceOf(a);
+        vm.prank(a);
+        uint256 got = c.withdrawOwed();
+        if (got != due || imd.balanceOf(a) - before != due || c.owed(a) != 0) owedPaidWrong = true;
+        withdrawnOwed[a] += got;
+        _observe();
+    }
+
     function warp(uint32 by) external {
         vm.warp(block.timestamp + bound(by, 1, 4 days));
         vm.roll(block.number + bound(by, 1, 1000));
@@ -202,6 +238,11 @@ contract LifecycleHandler is Test {
                 if (m.answers[q] != 0) seenAnswers[id][q] = m.answers[q];
             }
         }
+    }
+
+    function _third(uint8 who) internal view returns (address) {
+        uint8 i = who % 3;
+        return i == 2 ? address(0x000000000000000000000000000000000000dEaD) : recipients[i];
     }
 
     function _id(uint256 seed) internal view returns (uint256) {
@@ -276,6 +317,8 @@ contract ConditionalsLifecycleInvariantTest is Fixture {
     /// forge-config: default.invariant.depth = 80
     function invariant_nobodyTakesMoreThanTheMarketHeld() public view {
         assertFalse(handler.voidPaidWrong(), "a voided market paid other than the stake");
+        assertFalse(handler.winnerShortPaid(), "a settled market paid a trader less than its winning or refunded stake");
+        assertFalse(handler.owedPaidWrong(), "withdrawOwed paid other than what was owed");
         uint256 n = c.marketCount();
         for (uint256 id = 1; id <= n; ++id) {
             uint256 total;
@@ -304,12 +347,19 @@ contract ConditionalsLifecycleInvariantTest is Fixture {
                 }
             }
         }
+        address r0 = handler.recipients(0);
+        address r1 = handler.recipients(1);
+        owed += c.owed(DEAD) + c.owed(r0) + c.owed(r1);
         assertGe(imd.balanceOf(address(c)), owed);
         assertEq(imd.allowance(address(c), address(intake)), 0);
-        assertEq(imd.balanceOf(DEAD), c.totalBurned());
-        assertEq(imd.balanceOf(handler.recipients(0)) + imd.balanceOf(handler.recipients(1)), c.totalBuilderFees());
-        // burned = pot*2% and fee = pot*1%, each rounded down per market: burned - 2*fee is 0 or 1 per market.
-        assertGe(c.totalBurned(), 2 * c.totalBuilderFees());
-        assertLe(c.totalBurned() - 2 * c.totalBuilderFees(), n);
+        // Every fee is either delivered or waiting in `owed`, never lost and never paid twice.
+        assertEq(imd.balanceOf(DEAD) + c.owed(DEAD), c.totalBurned());
+        assertEq(
+            imd.balanceOf(r0) + imd.balanceOf(r1) + c.owed(r0) + c.owed(r1), c.totalBuilderFees(), "fees delivered"
+        );
+        // Uncapped, burned = pot*2% and fee = pot*1%, each rounded down: burned - 2*fee is 0 or 1. Capped at the
+        // losing pool L, burned = floor(2L/3) and fee = L - burned: burned - 2*fee is 0, -1 or -2. So per market the
+        // gap is within 2 wei of the 2:1 split.
+        assertApproxEqAbs(c.totalBurned(), 2 * c.totalBuilderFees(), 2 * n);
     }
 }

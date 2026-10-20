@@ -500,16 +500,44 @@ contract ConditionalsAdversarialTest is Fixture {
     // Settlement arithmetic at its edges
     // ---------------------------------------------------------------------------------------------------------------
 
-    /// @dev As the brief states it, the fee is on the whole pot, so a winning side much larger than the losing one gets
-    ///      back less than it staked (reported as an info finding).
-    function test_lopsidedWinnersPayTheFeeOnTheirOwnStake() public {
+    /// @dev 3% of a 101 IMD pot (3.03 IMD) is more than the 1 IMD the losing side staked, so the fee is capped at the
+    ///      losing pool, split 2:1 between the burn and the fee recipient, and the winner gets back exactly its stake.
+    function test_lopsidedWinnersAreMadeWholeByTheFeeCap() public {
         uint256 id = _create();
         _stake(alice, id, 0, 0, 100 ether);
         _stake(bob, id, 0, 1, 1 ether);
         _resolve(id, true, true);
         uint256 got = _claim(alice, id);
-        assertEq(got, 101 ether - 101 ether * 3 / 100);
-        assertLt(got, 100 ether);
+        assertEq(got, 100 ether);
+        uint256 burned = uint256(1 ether) * 200 / 300;
+        assertEq(imd.balanceOf(DEAD), burned);
+        assertEq(imd.balanceOf(builder), 1 ether - burned);
+        assertEq(imd.balanceOf(address(c)), 0);
+        vm.prank(bob);
+        vm.expectRevert(Conditionals.NothingToClaim.selector);
+        c.claim(id);
+    }
+
+    /// @dev Exactly at the cap (losing = 3% of the pot) the uncapped split applies; below it the cap does.
+    function test_feeCapBoundary() public {
+        // pot = 100 IMD, losing = 3 IMD: 3% of the pot equals the losing pool, so the uncapped split applies.
+        uint256 id = _create();
+        uint256 id2 = _create();
+        _stake(alice, id, 0, 0, 97 ether);
+        _stake(bob, id, 0, 1, 3 ether);
+        _stake(alice, id2, 0, 0, 97 ether);
+        _stake(bob, id2, 0, 1, 2 ether);
+        _resolve(id, true, true);
+        assertEq(_claim(alice, id), 97 ether);
+        assertEq(imd.balanceOf(DEAD), 2 ether);
+        assertEq(imd.balanceOf(builder), 1 ether);
+
+        // pot = 99 IMD, losing = 2 IMD < 2.97 IMD: the cap applies, all 2 IMD go in fees and the winner nets its stake.
+        _resolve(id2, true, true);
+        uint256 burned2 = uint256(2 ether) * 200 / 300;
+        assertEq(_claim(alice, id2), 97 ether);
+        assertEq(imd.balanceOf(DEAD), 2 ether + burned2);
+        assertEq(imd.balanceOf(builder), 1 ether + (2 ether - burned2));
     }
 
     /// @dev The smallest stakes on both sides: fees round down, winners split what is left, nothing is created.
@@ -551,12 +579,20 @@ contract ConditionalsAdversarialTest is Fixture {
         uint256 pot = win[0] + win[1] + win[2] + lose;
         uint256 burned = pot * 200 / 10_000;
         uint256 fee = pot * 100 / 10_000;
+        if (burned + fee > lose) {
+            // The fee is capped at the losing pool, split 2:1.
+            burned = lose * 200 / 300;
+            fee = lose - burned;
+        }
+        assertLe(burned + fee, lose, "the fee never exceeds what the losing side staked");
+        assertLe(burned + fee, pot * 3 / 100, "the fee never exceeds 3% of the pot");
         assertEq(imd.balanceOf(DEAD), burned);
         assertEq(imd.balanceOf(builder), fee);
         uint256 paid;
         for (uint256 i; i < 3; ++i) {
             uint256 got = _claim(winners[i], id);
             assertEq(got, win[i] * (pot - burned - fee) / (win[0] + win[1] + win[2]));
+            assertGe(got, win[i], "a winner never nets less than it staked");
             paid += got;
         }
         assertLe(paid, pot - burned - fee);

@@ -1,0 +1,8 @@
+cache/
+out/
+broadcast/
+node_modules/
+.env
+.env*.local
+.next/
+.vercel/

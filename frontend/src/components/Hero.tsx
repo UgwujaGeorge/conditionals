@@ -1,7 +1,7 @@
 "use client";
 
 import { ForkCanvas } from "./ForkCanvas";
-import { ArrowIcon } from "./Glyphs";
+import { ArrowIcon, Logo } from "./Glyphs";
 import { useMarkets } from "./Providers";
 import { fmtPct } from "@/lib/format";
 import { yesChance } from "@/lib/market";
@@ -37,13 +37,20 @@ export function Hero({ onCreate }: { onCreate: () => void }) {
             <span className="chip">Robinhood Chain</span>
           </div>
           <h1
-            className="animate-rise mt-7 font-display text-[clamp(3.2rem,9vw,7.6rem)] leading-[0.92] tracking-[-0.02em]"
+            className="animate-rise mt-7 flex items-center gap-[0.18em] font-display text-[clamp(3.4rem,10vw,8rem)] leading-none tracking-[-0.02em]"
             style={{ animationDelay: "0.15s" }}
           >
-            Trade the world
-            <br />
-            <em className="text-split-grad pr-2">where it happens.</em>
+            <span className="inline-block h-[0.82em] w-[0.82em] shrink-0">
+              <Logo size="100%" />
+            </span>
+            Conditionals
           </h1>
+          <p
+            className="animate-rise mt-4 font-display text-[clamp(1.6rem,3.6vw,2.8rem)] italic leading-tight"
+            style={{ animationDelay: "0.22s" }}
+          >
+            <span className="text-split-grad pr-1">Trade the world where it happens.</span>
+          </p>
           <p
             className="animate-rise mt-7 max-w-xl text-lg leading-relaxed text-ink-2 sm:text-xl"
             style={{ animationDelay: "0.3s" }}

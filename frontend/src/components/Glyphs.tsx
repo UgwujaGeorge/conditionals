@@ -3,7 +3,7 @@ import { worldPot, yesChance } from "@/lib/market";
 import type { MarketView } from "@/lib/types";
 
 /** The brand mark: one line that splits in two. */
-export function Logo({ size = 26 }: { size?: number }) {
+export function Logo({ size = 26 }: { size?: number | string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden>
       <defs>

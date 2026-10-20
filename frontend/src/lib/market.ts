@@ -24,13 +24,18 @@ export function impact(m: MarketView): number | null {
   return a === null || b === null ? null : (a - b) * 100;
 }
 
-/** Payout multiple on a winning side, after the 3% fee. */
+/** The fee on a settled world: 3% of the pot, capped at the losing pool so a winner never nets less than staked. */
+export function worldFee(winning: number, losing: number) {
+  return Math.min(((winning + losing) * RULES.feeBps) / 10_000, losing);
+}
+
+/** Payout multiple on a winning side, after the fee. */
 export function multiple(m: MarketView, w: World, s: Side, extra = 0): number | null {
   const pool = m.pools[w][s] + extra;
   const other = m.pools[w][s === 0 ? 1 : 0];
   if (pool === 0) return null;
   if (other === 0) return 1;
-  return ((pool + other) * (1 - RULES.feeBps / 10_000)) / pool;
+  return (pool + other - worldFee(pool, other)) / pool;
 }
 
 /** What a new stake would pay if its world happens and its side wins. */
@@ -39,7 +44,7 @@ export function estimatePayout(m: MarketView, w: World, s: Side, amount: number)
   const pool = m.pools[w][s] + amount;
   const other = m.pools[w][s === 0 ? 1 : 0];
   if (other === 0) return amount;
-  return (amount * (pool + other) * (1 - RULES.feeBps / 10_000)) / pool;
+  return (amount * (pool + other - worldFee(pool, other))) / pool;
 }
 
 export type Stage = "trading" | "closed" | "resolving" | "voidable" | "settled" | "voided";
@@ -49,13 +54,23 @@ export function stage(m: MarketView, now: number): Stage {
   if (m.status === "voided") return "voided";
   if (now < m.closeTime) return "trading";
   if (now < m.resolveTime) return "closed";
-  if (now > m.voidAfter && !settleable(m)) return "voidable";
+  if (voidable(m, now)) return "voidable";
   return "resolving";
 }
 
+/** Both answers are needed: the outcome decides the winning side in whichever world happened. */
 export function settleable(m: MarketView) {
   if (m.status !== "open") return false;
-  return m.answers[0] === 2 || (m.answers[0] === 1 && m.answers[1] !== 0);
+  return m.answers[0] !== 0 && m.answers[1] !== 0;
+}
+
+/** Whether `voidMarket` would succeed now: past voidAfter, not settleable, and no live ask younger than a day. */
+export function voidable(m: MarketView, now: number) {
+  if (m.status !== "open" || now <= m.voidAfter || settleable(m)) return false;
+  for (const q of [0, 1] as const) {
+    if (m.answers[q] === 0 && m.openAsks[q] > 0 && now < m.lastAskAt[q] + RULES.retryHours * 3600) return false;
+  }
+  return true;
 }
 
 /** Whether `requestResolution` would ask something now. */
@@ -63,7 +78,6 @@ export function askable(m: MarketView, now: number) {
   if (m.status !== "open" || now < m.resolveTime || now > m.voidAfter) return false;
   const can = (q: 0 | 1) => {
     if (m.answers[q] !== 0) return false;
-    if (q === 1 && m.answers[0] === 2) return false;
     return m.openAsks[q] === 0 || now >= m.lastAskAt[q] + RULES.retryHours * 3600;
   };
   return can(0) || can(1);
@@ -73,7 +87,7 @@ export function askable(m: MarketView, now: number) {
 export function askCost(m: MarketView, now: number) {
   let n = 0;
   for (const q of [0, 1] as const) {
-    if (m.answers[q] !== 0 || (q === 1 && m.answers[0] === 2)) continue;
+    if (m.answers[q] !== 0) continue;
     if (m.openAsks[q] === 0 || now >= m.lastAskAt[q] + RULES.retryHours * 3600) n++;
   }
   return Math.max(0, n * RULES.oraclePrice - m.budget);

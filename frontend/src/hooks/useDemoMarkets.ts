@@ -24,13 +24,19 @@ function payout(m: MarketView): number {
 
 function settle(m: MarketView): { market: MarketView; burned: number; fee: number } {
   const world: World = m.answers[0] === 1 ? 0 : 1;
-  const side: Side = world === 0 && m.answers[1] === 1 ? 0 : 1;
+  const side: Side = m.answers[1] === 1 ? 0 : 1;
   const [yes, no] = m.pools[world];
   const next: MarketView = { ...m, status: "settled", world, winningSide: side, budget: 0 };
   if (yes === 0 || no === 0) return { market: { ...next, worldRefunded: true }, burned: 0, fee: 0 };
   const pot = yes + no;
-  const burned = (pot * RULES.burnBps) / 10_000;
-  const fee = (pot * RULES.builderBps) / 10_000;
+  const losing = side === 0 ? no : yes;
+  let burned = (pot * RULES.burnBps) / 10_000;
+  let fee = (pot * RULES.builderBps) / 10_000;
+  if (burned + fee > losing) {
+    // As the contract: the fee is capped at the losing pool, split 2:1 between the burn and the builder.
+    burned = (losing * RULES.burnBps) / RULES.feeBps;
+    fee = losing - burned;
+  }
   return { market: { ...next, netPot: pot - burned - fee }, burned, fee };
 }
 

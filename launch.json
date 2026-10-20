@@ -1,0 +1,16 @@
+{
+  "kind": "evm_contracts",
+  "contracts": [
+    {
+      "contract": "Conditionals",
+      "constructorArgs": [
+        "$owner",
+        "0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127",
+        "0xa43e6f75ee006411f79ac1c84120606c2330de82",
+        "0x5598aa9146215bc13eb26f2c692ad1461fd32982",
+        "0x63bcf2d1483c7628d7d53704ff9c8199dc28d907"
+      ]
+    }
+  ],
+  "notes": "Deploys src/Conditionals.sol:Conditionals on Robinhood Chain (4663), a conditional prediction market in IMD settled by the IdentityMD oracle. Constructor: owner = $owner, imd = 0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127 (IMD on Robinhood Chain), intake = 0xa43e6f75ee006411f79ac1c84120606c2330de82 (IdentityMD Intake version 2), oracleSigner = 0x5598aa9146215bc13eb26f2c692ad1461fd32982, feeRecipient = 0x63bcf2d1483c7628d7d53704ff9c8199dc28d907 (the brief's fee recipient). The constructor makes no external calls; it stores the addresses and activates the initial oracle configuration: action oracle.request@oracle-1, price 0.5 IMD, panel 5, quorum 4. A market asks 'if CONDITION, will OUTCOME?' with two worlds (condition happens / does not), each with a YES and a NO pool of IMD; the creator deposits two questions' worth of IMD (1 IMD at the 0.5 IMD price) as the market's resolution budget, returned less what was spent at settlement or void. From resolveTime anyone calls requestResolution: the contract pays the Intake with requestWithFailure for bool, panel-evidence questions over an absolute one-block Ethereum window at block.number - 10, charging the Intake's live priceOf when it is below the market's snapshot and the snapshot otherwise, and stores keccak256 of each canonical question document. The first ask of each question is paid from the budget; a retry (after a 1 day delay while an ask is live, or at once after an onFailure) is paid by the caller. onOracleResult (0x510379c7) accepts an answer only from the Intake for its own live ask with the stored questionHash, answerType bool, panelSize and quorum at least the market's, agreed >= quorum, not expired, issuedAt at most 5 minutes ahead of the chain clock, and an EIP-712 signature (domain IdentityMD Oracle, version 2, this contract) from the market's oracle signer. onFailure (0x5a0df71e) is unsigned and only clears the ask. Settlement: the world that did not happen is refunded in full; in the world that happened the winning side splits the pot minus a 3% fee (2% to the burn address 0x000000000000000000000000000000000000dEaD, because IMD refuses transfers to zero, 1% to feeRecipient), capped at what the losing side staked so a winner never nets less than they staked; a one-sided world is refunded with no fee. With no usable answer 30 days after resolveTime anyone can void the market (refused while an unanswered ask younger than 1 day is live) and every stake is refunded. Stakers claim their own payouts; a burn, fee or budget transfer IMD refuses is credited to owed and the recipient collects it with the permissionless withdrawOwed. The owner (Ownable2Step) can only propose an oracle configuration for future markets, activatable between 3 and 10 days after the proposal, and set the fee recipient; it cannot touch stakes, answers or open markets. No token, pool, proxy or pause."
+}

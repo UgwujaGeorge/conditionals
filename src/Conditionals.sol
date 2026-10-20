@@ -6,10 +6,10 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
-import {IIntake} from "./interfaces/IIntake.sol";
+import {IIntake, IIntakePrice} from "./interfaces/IIntake.sol";
 import {IOracleAttestation} from "./interfaces/IOracleAttestation.sol";
 
 /// @title Conditionals
@@ -24,10 +24,13 @@ import {IOracleAttestation} from "./interfaces/IOracleAttestation.sol";
 /// question it asked. An answer counts only when the oracle's signer signed it for this contract, for that exact
 /// question, with at least the market's panel and quorum.
 ///
-/// Settlement: the world that did not happen is refunded in full. In the world that happened, the winning side
-/// splits the pot minus a 3% fee: 2% is burned (sent to 0x...dEaD) and 1% goes to the fee recipient. A world with
-/// stakes on only one side has no counterparty and is refunded with no fee. A market with no usable answer by
-/// `voidAfter` (resolveTime + 30 days) can be voided by anyone, which refunds every stake.
+/// Settlement needs both answers. The condition's answer picks the world that happened; the outcome's answer picks
+/// the winning side in it, in either world. The world that did not happen is refunded in full. In the world that
+/// happened, the winning side splits the pot minus a 3% fee: 2% is burned (sent to 0x...dEaD) and 1% goes to the fee
+/// recipient; the fee is capped at what the losing side staked, so a winner never nets less than they staked. A world
+/// with stakes on only one side has no counterparty and is refunded with no fee. A market with no
+/// usable answer by `voidAfter` (resolveTime + 30 days) can be voided by anyone, which refunds every stake; a void
+/// waits while an ask younger than RETRY_DELAY is still live, so an answer on its way cannot be voided away.
 ///
 /// The owner can only rotate the oracle configuration for future markets (behind a 3 day delay) and change the fee
 /// recipient. It cannot touch stakes, answers or open markets: each market keeps the configuration it was created with.
@@ -66,6 +69,11 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
     uint256 public constant RETRY_DELAY = 1 days;
     /// @notice Delay before a proposed oracle configuration can be activated.
     uint256 public constant CONFIG_DELAY = 3 days;
+    /// @notice How long after its delay a proposed configuration stays activatable. A proposal that is not
+    ///         activated in this window lapses, so a creator never meets a configuration proposed months earlier.
+    uint256 public constant CONFIG_WINDOW = 7 days;
+    /// @notice How far ahead of this chain's clock an attestation's `issuedAt` may sit (the protocol's tolerance).
+    uint256 public constant ISSUED_AT_TOLERANCE = 5 minutes;
 
     /// @notice Bounds for the oracle configuration.
     uint16 public constant MIN_PANEL_SIZE = 5;
@@ -80,6 +88,8 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
     /// @notice How long a signed answer stays valid.
     uint256 public constant VALID_FOR_SECONDS = 86_400;
 
+    /// @notice The oracle action the contract is deployed with. Each market carries its own (`OracleConfig.action`),
+    ///         so a new action version can be rotated in for future markets without a redeploy.
     bytes32 public constant ORACLE_ACTION = "oracle.request@oracle-1";
 
     bytes32 public constant ATTESTATION_TYPEHASH = keccak256(
@@ -114,10 +124,13 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
 
     struct OracleConfig {
         IIntake intake;
+        /// @dev The attester: an EOA, or a contract that answers ERC-1271 (the protocol's signer registry).
         address signer;
         uint128 price;
         uint16 panelSize;
         uint16 quorum;
+        /// @dev The Intake action id, e.g. bytes32("oracle.request@oracle-1").
+        bytes32 action;
     }
 
     struct Market {
@@ -180,6 +193,10 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
     /// @notice Asks this contract sent, keyed by keccak256(intake, intake requestId).
     mapping(bytes32 => Ask) public asks;
 
+    /// @notice IMD a settlement or void could not push to a third party (IMD refused the transfer), collectable
+    ///         by that party with `withdrawOwed`.
+    mapping(address => uint256) public owed;
+
     /// @notice Totals, for display.
     uint256 public totalBurned;
     uint256 public totalBuilderFees;
@@ -211,6 +228,8 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
     event Voided(uint256 indexed marketId);
     event BudgetReturned(uint256 indexed marketId, address indexed creator, uint256 amount);
     event Claimed(uint256 indexed marketId, address indexed trader, uint256 amount);
+    event PaymentDeferred(address indexed to, uint256 amount);
+    event OwedWithdrawn(address indexed to, uint256 amount);
     event OracleConfigProposed(OracleConfig config, uint256 activatableAt);
     event OracleConfigActivated(OracleConfig config);
     event FeeRecipientSet(address feeRecipient);
@@ -233,6 +252,8 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
     error BadAttestation();
     error ZeroAddress();
     error DuplicateAsk();
+    error BudgetTooHigh(uint256 budget, uint256 maxBudget);
+    error ConfigExpired();
 
     // ---------------------------------------------------------------------------------------------------------------
     // Construction and configuration
@@ -250,8 +271,9 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
         if (address(imd_) == address(0) || feeRecipient_ == address(0)) revert ZeroAddress();
         imd = imd_;
         feeRecipient = feeRecipient_;
-        OracleConfig memory config =
-            OracleConfig({intake: intake_, signer: oracleSigner_, price: 0.5 ether, panelSize: 5, quorum: 4});
+        OracleConfig memory config = OracleConfig({
+            intake: intake_, signer: oracleSigner_, price: 0.5 ether, panelSize: 5, quorum: 4, action: ORACLE_ACTION
+        });
         _validateConfig(config);
         oracleConfig = config;
         emit OracleConfigActivated(config);
@@ -266,10 +288,12 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
         emit OracleConfigProposed(config, pendingOracleConfigAt);
     }
 
-    /// @notice Activates the proposed configuration. Markets created earlier keep theirs.
+    /// @notice Activates the proposed configuration, between CONFIG_DELAY and CONFIG_DELAY + CONFIG_WINDOW after
+    ///         it was proposed. Markets created earlier keep theirs.
     function activateOracleConfig() external onlyOwner {
         uint256 at = pendingOracleConfigAt;
         if (at == 0 || block.timestamp < at) revert TooEarly();
+        if (block.timestamp > at + CONFIG_WINDOW) revert ConfigExpired();
         oracleConfig = pendingOracleConfig;
         delete pendingOracleConfig;
         pendingOracleConfigAt = 0;
@@ -294,12 +318,15 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
     /// @param closeTime Staking stops at this unix time. Set it before the condition or outcome can be known:
     ///        stakes are accepted until then whatever has become public.
     /// @param resolveTime Both statements are judged as of this unix time; resolution can be requested from then.
+    /// @param maxBudget The most IMD the creator agrees to deposit (two oracle questions at the active price).
+    ///        The call reverts if an oracle configuration activated meanwhile charges more.
     function createMarket(
         string calldata condition,
         string calldata outcome,
         string calldata rules,
         uint64 closeTime,
-        uint64 resolveTime
+        uint64 resolveTime,
+        uint256 maxBudget
     ) external nonReentrant returns (uint256 marketId) {
         _validateText(condition, MAX_CONDITION_LENGTH);
         _validateText(outcome, MAX_OUTCOME_LENGTH);
@@ -319,6 +346,7 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
         m.voidAfter = resolveTime + uint64(RESOLUTION_PERIOD);
         m.oracle = oracleConfig;
         m.budget = uint256(m.oracle.price) * 2;
+        if (m.budget > maxBudget) revert BudgetTooHigh(m.budget, maxBudget);
         m.condition = condition;
         m.outcome = outcome;
         m.rules = rules;
@@ -385,11 +413,12 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
             a.questionHash != ask.questionHash || a.answerType != 0 || a.answer.length != 32
                 || a.panelSize < config.panelSize || a.quorum < config.quorum || a.agreed < a.quorum
                 || a.agreed > a.panelSize || block.timestamp > a.expiresAt
+                || a.issuedAt > block.timestamp + ISSUED_AT_TOLERANCE
         ) revert BadAttestation();
 
-        (address recovered, ECDSA.RecoverError err,) =
-            ECDSA.tryRecover(_hashTypedDataV4(_hashAttestation(a)), signature);
-        if (err != ECDSA.RecoverError.NoError || recovered != config.signer) revert BadAttestation();
+        if (!SignatureChecker.isValidSignatureNow(config.signer, attestationDigest(a), signature)) {
+            revert BadAttestation();
+        }
 
         uint256 value = abi.decode(a.answer, (uint256));
         if (value > 1) revert BadAttestation();
@@ -399,7 +428,7 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
     }
 
     /// @notice The Intake's callback for a refusal (status 1) or no result (2). Selector 0x5a0df71e.
-    ///         Unsigned, so it only clears the ask: the question can be asked again after RETRY_DELAY.
+    ///         Unsigned, so it only clears the ask: the question can be asked again at once, paid by the caller.
     function onFailure(bytes32 requestId, uint8 status, bytes32 reason, uint16, uint16, bytes calldata) external {
         bytes32 key = _askKey(msg.sender, requestId);
         Ask memory ask = asks[key];
@@ -409,17 +438,18 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
         emit AskFailed(ask.marketId, ask.question, requestId, status, reason);
     }
 
-    /// @notice Settles a market once the oracle has answered enough: the condition false, or both true/false.
+    /// @notice Settles a market once the oracle has answered both questions.
     function settle(uint256 marketId) external nonReentrant {
         Market storage m = _market(marketId);
         if (!_settleable(m)) revert NotSettleable();
         _settle(marketId, m);
     }
 
-    /// @notice Voids a market that has no usable answer by voidAfter. Every stake is refunded.
+    /// @notice Voids a market that has no usable answer by voidAfter. Every stake is refunded. Refused while an
+    ///         unanswered question has an ask younger than RETRY_DELAY still live, so an answer on its way counts.
     function voidMarket(uint256 marketId) external nonReentrant {
         Market storage m = _market(marketId);
-        if (m.status != Status.Open || block.timestamp <= m.voidAfter || _settleable(m)) revert NotVoidable();
+        if (!_voidable(m)) revert NotVoidable();
         m.status = Status.Voided;
         emit Voided(marketId);
         _returnBudget(marketId, m);
@@ -438,6 +468,15 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
         claimed[marketId][msg.sender] = true;
         imd.safeTransfer(msg.sender, amount);
         emit Claimed(marketId, msg.sender, amount);
+    }
+
+    /// @notice Pays the caller what a settlement or void could not push to them (see `owed`).
+    function withdrawOwed() external nonReentrant returns (uint256 amount) {
+        amount = owed[msg.sender];
+        if (amount == 0) revert NothingToClaim();
+        owed[msg.sender] = 0;
+        imd.safeTransfer(msg.sender, amount);
+        emit OwedWithdrawn(msg.sender, amount);
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -474,6 +513,17 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
         return _settleable(_markets[marketId]);
     }
 
+    /// @notice Whether `voidMarket` would succeed now.
+    function voidable(uint256 marketId) external view returns (bool) {
+        if (marketId == 0 || marketId > marketCount) return false;
+        return _voidable(_markets[marketId]);
+    }
+
+    /// @notice The EIP-712 digest this contract verifies an attestation's signature against.
+    function attestationDigest(Attestation calldata a) public view returns (bytes32) {
+        return _hashTypedDataV4(_hashAttestation(a));
+    }
+
     /// @notice The canonical question document the oracle hashes, for `question` asked at `windowBlock`.
     function questionDocument(uint256 marketId, uint8 question, uint256 windowBlock)
         public
@@ -503,20 +553,40 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
 
     function _askable(Market storage m, uint8 q) internal view returns (bool) {
         if (m.answers[q] != UNANSWERED) return false;
-        // The outcome is irrelevant once the condition is known not to have happened.
-        if (q == OUTCOME && m.answers[CONDITION] == ANSWER_FALSE) return false;
         return m.openAsks[q] == 0 || block.timestamp >= uint256(m.lastAskAt[q]) + RETRY_DELAY;
     }
 
+    /// @dev Both questions are needed: the outcome decides the winning side in whichever world happened.
     function _settleable(Market storage m) internal view returns (bool) {
         if (m.status != Status.Open) return false;
-        uint8 c = m.answers[CONDITION];
-        return c == ANSWER_FALSE || (c == ANSWER_TRUE && m.answers[OUTCOME] != UNANSWERED);
+        return m.answers[CONDITION] != UNANSWERED && m.answers[OUTCOME] != UNANSWERED;
+    }
+
+    function _voidable(Market storage m) internal view returns (bool) {
+        if (m.status != Status.Open || block.timestamp <= m.voidAfter || _settleable(m)) return false;
+        for (uint8 q = 0; q < 2; ++q) {
+            if (
+                m.answers[q] == UNANSWERED && m.openAsks[q] != 0
+                    && block.timestamp < uint256(m.lastAskAt[q]) + RETRY_DELAY
+            ) return false;
+        }
+        return true;
+    }
+
+    /// @dev What an ask pays: the Intake's live price when it is below the market's snapshot (the Intake pulls
+    ///      exactly `amount`, so paying the snapshot would overpay), else the snapshot. A price above the snapshot
+    ///      is refused by the Intake and the market voids at voidAfter, as documented; the caller never pays more
+    ///      than the price the market was created with. An Intake without `priceOf` is charged the snapshot.
+    function _askPrice(OracleConfig memory config) internal view returns (uint256 price) {
+        price = config.price;
+        try IIntakePrice(address(config.intake)).priceOf(config.action, address(imd)) returns (uint256 live) {
+            if (live != 0 && live < price) price = live;
+        } catch {}
     }
 
     function _ask(uint256 marketId, Market storage m, uint8 q) internal {
         OracleConfig memory config = m.oracle;
-        uint256 price = config.price;
+        uint256 price = _askPrice(config);
         uint256 windowBlock = block.number - WINDOW_DEPTH;
 
         if (m.budget >= price) {
@@ -532,7 +602,7 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
         imd.forceApprove(address(config.intake), price);
         bytes32 requestId = config.intake
             .requestWithFailure(
-                ORACLE_ACTION,
+                config.action,
                 body,
                 IIntake.Callback({target: address(this), selector: this.onOracleResult.selector}),
                 this.onFailure.selector,
@@ -552,8 +622,7 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
 
     function _settle(uint256 marketId, Market storage m) internal {
         uint8 world = m.answers[CONDITION] == ANSWER_TRUE ? WORLD_HAPPENS : WORLD_DOES_NOT;
-        uint8 side = NO;
-        if (world == WORLD_HAPPENS) side = m.answers[OUTCOME] == ANSWER_TRUE ? YES : NO;
+        uint8 side = m.answers[OUTCOME] == ANSWER_TRUE ? YES : NO;
 
         uint256 yes = m.pools[world][YES];
         uint256 no = m.pools[world][NO];
@@ -567,8 +636,15 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
             m.worldRefunded = true;
         } else {
             uint256 pot = yes + no;
+            uint256 losing = side == YES ? no : yes;
             burned = pot * BURN_BPS / BPS;
             builderFee = pot * BUILDER_BPS / BPS;
+            if (burned + builderFee > losing) {
+                // The fee never exceeds what the losing side risked, so a winner never nets less than they staked:
+                // a world whose only counterparty is dust is as good as refunded, with the dust split 2:1.
+                burned = losing * BURN_BPS / FEE_BPS;
+                builderFee = losing - burned;
+            }
             m.netPot = pot - burned - builderFee;
             totalBurned += burned;
             totalBuilderFees += builderFee;
@@ -576,8 +652,8 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
 
         emit Settled(marketId, world, side, m.worldRefunded, burned, builderFee);
 
-        if (burned != 0) imd.safeTransfer(BURN_ADDRESS, burned);
-        if (builderFee != 0) imd.safeTransfer(feeRecipient, builderFee);
+        _push(BURN_ADDRESS, burned);
+        _push(feeRecipient, builderFee);
         _returnBudget(marketId, m);
     }
 
@@ -585,8 +661,19 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
         uint256 amount = m.budget;
         if (amount == 0) return;
         m.budget = 0;
-        imd.safeTransfer(m.creator, amount);
+        _push(m.creator, amount);
         emit BudgetReturned(marketId, m.creator, amount);
+    }
+
+    /// @dev Pays a third party (the burn address, the fee recipient, a creator) inside a staker's transaction. IMD
+    ///      can refuse a transfer to a blocked address; such a refusal must not block the stakers, so the amount is
+    ///      credited to `owed` instead and the recipient collects it with `withdrawOwed`.
+    function _push(address to, uint256 amount) internal {
+        if (amount == 0) return;
+        (bool ok, bytes memory data) = address(imd).call(abi.encodeCall(IERC20.transfer, (to, amount)));
+        if (ok && (data.length == 0 ? address(imd).code.length > 0 : abi.decode(data, (bool)))) return;
+        owed[to] += amount;
+        emit PaymentDeferred(to, amount);
     }
 
     function _payout(uint256 marketId, Market storage m, address trader) internal view returns (uint256 amount) {
@@ -726,8 +813,9 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
     function _validateConfig(OracleConfig memory config) internal pure {
         if (address(config.intake) == address(0) || config.signer == address(0)) revert ZeroAddress();
         if (
-            config.price == 0 || config.price > MAX_PRICE || config.panelSize < MIN_PANEL_SIZE
-                || config.panelSize > MAX_PANEL_SIZE || config.quorum < 2 || config.quorum > config.panelSize
+            config.action == bytes32(0) || config.price == 0 || config.price > MAX_PRICE
+                || config.panelSize < MIN_PANEL_SIZE || config.panelSize > MAX_PANEL_SIZE || config.quorum < 2
+                || config.quorum > config.panelSize
         ) revert InvalidConfig();
     }
 }

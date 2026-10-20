@@ -281,7 +281,8 @@ function StakeBox({
               : src.pending ?? `Stake ${fmtImd(value)} IMD on ${side === 0 ? "YES" : "NO"} in ${st.name}`}
       </button>
       <p className="mt-3 text-center text-xs text-mute">
-        3% of the winning world&apos;s pot is taken at settlement: 2% burned, 1% to the builder.
+        3% of the winning world&apos;s pot is taken at settlement: 2% burned, 1% to the builder. The fee never
+        exceeds the losing side&apos;s stakes, so a winner never nets less than staked.
       </p>
     </div>
   );
@@ -354,9 +355,9 @@ function Resolution({ m, now }: { m: MarketView; now: number }) {
     {
       label: "Answered",
       sub:
-        m.answers[0] === 0
+        m.answers[0] === 0 && m.answers[1] === 0
           ? "waiting for the panel"
-          : `condition ${answer(m.answers[0])}${m.answers[0] === 1 ? ` · outcome ${answer(m.answers[1]) ?? "pending"}` : ""}`,
+          : `condition ${answer(m.answers[0])} · outcome ${answer(m.answers[1]) ?? "pending"}`,
       done: settleable(m) || m.status !== "open",
       active: s === "resolving" && asked,
     },

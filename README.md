@@ -56,6 +56,10 @@ to the outcome: "if the Clarity Act passes, ETH above $5k is 62%; if it doesn't,
   questions; such a market ends in a void.
 - **Price changes.** Each market pays the Intake price it was created with. If the Intake raises its price, that
   market's asks revert and it is voided after 30 days.
+- **Close before it is known.** Staking is open until `closeTime`, which the creator chooses (at or before
+  `resolveTime`). A market whose condition or outcome becomes public before `closeTime` can be staked on with that
+  knowledge, as in any prediction market; creators should close trading before either can be known. The frontend
+  says so when a market is created.
 - **Rounding.** Payouts round down; at most a few wei per market stay in the contract.
 
 ## Contracts

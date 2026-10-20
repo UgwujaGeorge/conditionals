@@ -291,7 +291,8 @@ contract Conditionals is Ownable2Step, ReentrancyGuard, EIP712, IOracleAttestati
     /// @param condition The event the market is conditional on, e.g. "The Clarity Act is signed into US law".
     /// @param outcome What traders predict, e.g. "ETH closes above 5000 USD on Coinbase on 2026-12-01".
     /// @param rules How the oracle should judge both, including the sources to use.
-    /// @param closeTime Staking stops at this unix time.
+    /// @param closeTime Staking stops at this unix time. Set it before the condition or outcome can be known:
+    ///        stakes are accepted until then whatever has become public.
     /// @param resolveTime Both statements are judged as of this unix time; resolution can be requested from then.
     function createMarket(
         string calldata condition,

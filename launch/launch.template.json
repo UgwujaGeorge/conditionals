@@ -1,0 +1,15 @@
+{
+  "objective": "Launch the Conditionals contract in this repository, src/Conditionals.sol:Conditionals, on Robinhood Chain without changing its logic. It is a conditional prediction market in IMD settled by the IdentityMD oracle. Constructor (address owner = $owner, IERC20 imd = 0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127, IIntake intake = 0xa43e6f75ee006411f79ac1c84120606c2330de82, address oracleSigner = 0x5598aa9146215bc13eb26f2c692ad1461fd32982, address feeRecipient = FEE_RECIPIENT); it makes no external calls. A market asks 'if CONDITION, will OUTCOME?' and has two worlds (the condition happens / does not), each with a YES and a NO pool of IMD. The creator deposits 1 IMD (two 0.5 IMD oracle questions). After resolveTime anyone calls requestResolution: the contract pays the Intake with requestWithFailure for oracle.request@oracle-1 questions (panel 5, quorum 4, bool, panel evidence, window pinned to one Ethereum block, block.number - 10, since block.number on Robinhood Chain is the Ethereum block number) and stores keccak256 of each canonical question document. onOracleResult (selector 0x510379c7) accepts an answer only from the Intake for its own pending request, with the stored questionHash, answerType bool, panelSize and quorum at least the market's, agreed >= quorum, not expired, and an EIP-712 signature (domain IdentityMD Oracle, version 2) from the market's oracle signer. onFailure (0x5a0df71e) only clears the ask. Settlement: the world that did not happen is refunded; in the world that happened the winning side splits the pot minus 3% (2% burned to 0x000000000000000000000000000000000000dEaD because IMD reverts on transfers to zero, 1% to feeRecipient); a one-sided world is refunded with no fee; with no usable answer 30 days after resolveTime anyone can void and every stake is refunded. The owner can only propose an oracle configuration for future markets behind a 3 day delay and set the fee recipient; it cannot touch stakes, answers or open markets. No token, no pool, no proxy, no pause. The test suite (unit, fuzz, invariant, and a live-API question-hash vector) must keep passing.",
+  "shape": "chain",
+  "references": ["evm-contracts-launch", "oracle-consumer", "intake-client", "solidity-security-review", "eth-security"],
+  "steps": [
+    { "skill": "audit-imported-code" },
+    { "skill": "adapt-contract-project" },
+    { "skill": "adversarial-review" }
+  ],
+  "onchain": "evm_contracts",
+  "chainId": 4663,
+  "owner": "OWNER",
+  "repoUrl": "https://github.com/UgwujaGeorge/conditionals.git",
+  "baseCommit": "COMMIT"
+}

@@ -238,6 +238,10 @@ export function CreateModal({ open, onClose, onCreated, now }: { open: boolean; 
                   </label>
                 </div>
 
+                <p className="mt-3 text-xs text-mute">
+                  Close trading before the condition or the outcome can be known: stakes are accepted until then.
+                </p>
+
                 {errors.length > 0 && (condition || outcome || rules) && (
                   <ul className="mt-5 space-y-1 text-sm text-sun">
                     {errors.map((e) => (

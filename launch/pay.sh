@@ -8,7 +8,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 IMD_API=https://api.imd.fun
-RPC=https://rpc.mainnet.chain.robinhood.com
+RPC=${RPC:-https://rpc.mainnet.chain.robinhood.com}
 INTAKE=0xa43e6f75ee006411f79ac1c84120606c2330de82
 IMD=0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127
 PRICE=500000000000000000

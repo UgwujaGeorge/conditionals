@@ -30,14 +30,8 @@ export function Hero({ onCreate }: { onCreate: () => void }) {
 
       <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-center px-4 pb-28 pt-28 sm:px-6">
         <div className="max-w-3xl">
-          <div className="animate-rise flex flex-wrap items-center gap-2" style={{ animationDelay: "0.05s" }}>
-            <span className="chip">
-              <span className="h-1.5 w-1.5 animate-pulse-slow rounded-full bg-good" /> Settled by the IMD oracle
-            </span>
-            <span className="chip">Robinhood Chain</span>
-          </div>
           <h1
-            className="animate-rise mt-7 flex items-center gap-[0.18em] font-display text-[clamp(3.4rem,10vw,8rem)] leading-none tracking-[-0.02em]"
+            className="animate-rise flex items-center gap-[0.18em] font-display text-[clamp(3.4rem,10vw,8rem)] leading-none tracking-[-0.02em]"
             style={{ animationDelay: "0.15s" }}
           >
             <span className="inline-block h-[0.82em] w-[0.82em] shrink-0">
@@ -51,6 +45,11 @@ export function Hero({ onCreate }: { onCreate: () => void }) {
           >
             <span className="text-split-grad pr-1">Trade the world where it happens.</span>
           </p>
+          <div className="animate-rise mt-5" style={{ animationDelay: "0.26s" }}>
+            <span className="chip">
+              <span className="h-1.5 w-1.5 animate-pulse-slow rounded-full bg-good" /> Settled by IMD oracle
+            </span>
+          </div>
           <p
             className="animate-rise mt-7 max-w-xl text-lg leading-relaxed text-ink-2 sm:text-xl"
             style={{ animationDelay: "0.3s" }}

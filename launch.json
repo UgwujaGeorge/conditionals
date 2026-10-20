@@ -1,0 +1,16 @@
+{
+  "kind": "evm_contracts",
+  "contracts": [
+    {
+      "contract": "Conditionals",
+      "constructorArgs": [
+        "$owner",
+        "0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127",
+        "0xa43e6f75ee006411f79ac1c84120606c2330de82",
+        "0x5598aa9146215bc13eb26f2c692ad1461fd32982",
+        "0x63bcf2d1483c7628d7d53704ff9c8199dc28d907"
+      ]
+    }
+  ],
+  "notes": "Deploys src/Conditionals.sol:Conditionals on Robinhood Chain using the supplied IMD, IdentityMD Intake v2 and oracle signer addresses. Ownership is assigned to $owner. The constructor sets a 0.5 IMD question price, panel size 5 and quorum 4. On settlement, the winning side in the realized world shares its pot after 2% is sent to the fixed burn address and 1% to the supplied fee recipient; the other world and one-sided worlds are refunded. Unresolved markets can be voided after the 30 day resolution period, subject to the pending-ask retry delay. The owner can change the fee recipient and rotate oracle configuration for future markets after a 3 day delay."
+}

@@ -149,7 +149,7 @@ export function useDemoMarkets(): Source {
         if (!m || m.status !== "open") return;
         const answered: MarketView = {
           ...m,
-          answers: [condition ? 1 : 2, condition ? (outcome ? 1 : 2) : 0],
+          answers: [condition ? 1 : 2, outcome ? 1 : 2],
           openAsks: [0, 0],
         };
         const { market, burned: b, fee } = settle(answered);

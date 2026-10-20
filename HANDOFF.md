@@ -18,17 +18,23 @@ Last updated: 2026-10-20. Hackathon deadline: **21 Oct 2026** (imdradar.site/hac
   approve and the launch payment succeeded; total ~0.00101 ETH. The site was tested in live mode against a fork
   deployment with a scripted wallet: connect, approve, stake, create, ask the oracle, void and claim all work.
 
-- **Launch paid 2026-10-20 ~04:33 UTC.** Bought 0.5 IMD (swap), approve tx
-  `0xb99a61041d4d6917f5b3e67373344157e377ec50a78bc4e8cc1c0a518e12faf8`, launch tx
-  `0x7da2c11732bb2d3d59cfcced9bafc99ab096ac4c378c8094df01887f3ec276eb`, pinned commit `de2cd4a`. Wallet has ~0.00198
-  ETH left. Follow `GET https://api.imd.fun/intake/4663/<launch tx>` (IMD took ~6h to see GAMMA's hook payment).
-- Site live (demo mode until the address is set): https://conditionals-bay.vercel.app (Vercel project
+- **LIVE: IMD launch 2278.** Conditionals at `0xc8cc656b71dd77ae1e29b0bc7890edd110e73255` on Robinhood Chain (deploy
+  tx `0x7baf02fbc322ef9c583b8d50008b0a19fcc0e405ec200e484130a36cdf60da40`). Job `e854ea48-ee65-40eb-b029-f441e6b3b1a2`.
+  Owner and fee recipient: `0x63BCf2d1483c7628d7D53704ff9c8199Dc28d907`. Verified onchain: IMD, Intake, signer, 0.5 IMD
+  price, panel 5, quorum 4, action `oracle.request@oracle-1`, fees 300/200/100 bps.
+- Audit: the first audit found a high bug (world B always settled NO; the outcome was never asked); the swarm fixed it
+  and four lows, then the panel found a medium (dust counter-stake forcing a 3% fee); fixed by capping the fee at the
+  losing pool. Final judge: no findings. Delivered commit `f6d3551` merged; 106 tests pass. Manifest archived as
+  `launch/2278-manifest.json` (a root `launch.json` would block another launch kind).
+- Launch paid with 0.5 IMD (tx `0x7da2c11732bb2d3d59cfcced9bafc99ab096ac4c378c8094df01887f3ec276eb`); the wallet has
+  ~0.00198 ETH left.
+- Site: https://conditionals-bay.vercel.app, live mode against the deployed address (Vercel project
   `ugwujageorges-projects/conditionals`, root `frontend/`, GitHub connected so pushes to `main` redeploy). Vercel CLI for
   George: `vercel --global-config ~/.vercel-george --scope ugwujageorges-projects`. `conditionals.vercel.app` is someone
-  else's site.
+  else's site. Tested against a fork with the deployed bytecode: connect, create, stake.
 
-**Next: wait for IMD to admit the launch, follow the audit, merge the delivered commit, set the deployed address in
-`frontend/src/lib/config.ts`, push (redeploys), then submit.**
+**Next: the user creates the X account; submit at imdradar.site/hackathon with the contract address. Optional: a
+custom domain (conditionals.markets or conditionals.xyz were available), and a first real market.**
 
 ## Launch steps (one paid launch, 0.5 IMD)
 

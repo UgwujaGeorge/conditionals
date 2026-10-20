@@ -430,8 +430,11 @@ function Resolution({ m, now }: { m: MarketView; now: number }) {
             <button onClick={() => src.actions.simulateAnswer?.(m.id, true, false)} className="chip hover:text-ink">
               Happened · NO
             </button>
+            <button onClick={() => src.actions.simulateAnswer?.(m.id, false, true)} className="chip hover:text-ink">
+              Didn&apos;t happen · YES
+            </button>
             <button onClick={() => src.actions.simulateAnswer?.(m.id, false, false)} className="chip hover:text-ink">
-              Didn&apos;t happen
+              Didn&apos;t happen · NO
             </button>
           </div>
         </div>

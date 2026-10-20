@@ -18,8 +18,17 @@ Last updated: 2026-10-20. Hackathon deadline: **21 Oct 2026** (imdradar.site/hac
   approve and the launch payment succeeded; total ~0.00101 ETH. The site was tested in live mode against a fork
   deployment with a scripted wallet: connect, approve, stake, create, ask the oracle, void and claim all work.
 
-**Next: the user sends ~0.0015 ETH to the launch wallet; then `launch/buy-imd.sh`, `launch/pay.sh build <wallet> <wallet>`,
-`approve`, `launch`. Vercel deploy needs `vercel login --global-config ~/.vercel-george` (UgwujaGeorge).**
+- **Launch paid 2026-10-20 ~04:33 UTC.** Bought 0.5 IMD (swap), approve tx
+  `0xb99a61041d4d6917f5b3e67373344157e377ec50a78bc4e8cc1c0a518e12faf8`, launch tx
+  `0x7da2c11732bb2d3d59cfcced9bafc99ab096ac4c378c8094df01887f3ec276eb`, pinned commit `de2cd4a`. Wallet has ~0.00198
+  ETH left. Follow `GET https://api.imd.fun/intake/4663/<launch tx>` (IMD took ~6h to see GAMMA's hook payment).
+- Site live (demo mode until the address is set): https://conditionals-bay.vercel.app (Vercel project
+  `ugwujageorges-projects/conditionals`, root `frontend/`, GitHub connected so pushes to `main` redeploy). Vercel CLI for
+  George: `vercel --global-config ~/.vercel-george --scope ugwujageorges-projects`. `conditionals.vercel.app` is someone
+  else's site.
+
+**Next: wait for IMD to admit the launch, follow the audit, merge the delivered commit, set the deployed address in
+`frontend/src/lib/config.ts`, push (redeploys), then submit.**
 
 ## Launch steps (one paid launch, 0.5 IMD)
 

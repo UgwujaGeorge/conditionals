@@ -251,7 +251,7 @@ function StakeBox({
         <Row
           k={
             <>
-              If <span className={st.text}>{st.label}</span> and {side === 0 ? "YES" : "NO"} wins
+              <span className={st.text}>{cap(st.label)}</span> and {side === 0 ? "YES" : "NO"} wins
             </>
           }
           v={
@@ -261,11 +261,7 @@ function StakeBox({
           }
         />
         <Row
-          k={
-            <>
-              If <span className={WORLD[other].text}>{WORLD[other].label}</span>
-            </>
-          }
+          k={<span className={WORLD[other].text}>{cap(WORLD[other].label)}</span>}
           v={<span className="num text-ink-2">refunded · {fmtImd(value)} IMD</span>}
         />
         <Row k={<>If {side === 0 ? "NO" : "YES"} wins</>} v={<span className="num text-mute">0</span>} />
@@ -290,6 +286,8 @@ function StakeBox({
     </div>
   );
 }
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 function Row({ k, v }: { k: React.ReactNode; v: React.ReactNode }) {
   return (

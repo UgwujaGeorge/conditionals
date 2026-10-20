@@ -18,3 +18,9 @@ interface IIntake {
         uint256 amount
     ) external returns (bytes32 requestId);
 }
+
+/// @notice The Intake's price view, kept apart from `IIntake` so a buyer's mock need not implement it.
+interface IIntakePrice {
+    /// @notice The price of `action` in `asset`; zero when not sold.
+    function priceOf(bytes32 action, address asset) external view returns (uint256);
+}

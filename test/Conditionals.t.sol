@@ -890,6 +890,225 @@ contract ConditionalsTest is Fixture {
     }
 
     // ---------------------------------------------------------------------------------------------------------------
+    // Revision findings
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /// @dev Finding b57733eb: a 0.001 IMD counter-stake used to turn the fee-free one-sided world into a 3% fee on
+    ///      the winners' own principal. The fee is now capped at the losing pool: the sole winner gets exactly their
+    ///      stake back and the dust is split 2:1 between the burn and the fee recipient.
+    function test_feeIsCappedAtTheLosingPool() public {
+        uint256 id = _create();
+        _stake(alice, id, 0, 0, 1_000 ether);
+        _stake(bob, id, 0, 1, c.MIN_STAKE());
+        _resolve(id, true, true);
+        vm.prank(alice);
+        uint256 paid = c.claim(id);
+        assertEq(paid, 1_000 ether, "sole winner nets exactly their stake");
+        assertEq(c.totalBurned() + c.totalBuilderFees(), 1e15, "fee equals the losing pool");
+        assertEq(c.totalBurned(), uint256(1e15) * 200 / 300);
+        assertEq(imd.balanceOf(builder), 1e15 - uint256(1e15) * 200 / 300);
+        assertEq(c.getMarket(id).netPot, 1_000 ether);
+        assertFalse(c.getMarket(id).worldRefunded);
+        assertEq(_claimOrZero(bob, id), 0);
+        assertEq(imd.balanceOf(address(c)), 0);
+    }
+
+    /// @dev Above the cap the fee is the brief's 3% of the pot, as before.
+    function test_feeIsThreePercentOfThePotWhenTheLosingPoolCoversIt() public {
+        uint256 id = _create();
+        uint256 id2 = _create();
+        _stake(alice, id, 0, 0, 90 ether);
+        _stake(bob, id, 0, 1, 10 ether);
+        // Exactly at the cap: a losing pool of 3% of the pot pays the full fee and the winner nets their stake.
+        _stake(carol, id2, 1, 1, 97 ether);
+        _stake(dave, id2, 1, 0, 3 ether);
+        _resolve(id, true, true);
+        c.settle(id);
+        assertEq(c.totalBurned(), 2 ether);
+        assertEq(c.totalBuilderFees(), 1 ether);
+        assertEq(c.claimable(id, alice), 97 ether);
+        _resolve(id2, false, false);
+        c.settle(id2);
+        assertEq(c.totalBurned(), 4 ether);
+        assertEq(c.totalBuilderFees(), 2 ether);
+        assertEq(c.claimable(id2, carol), 97 ether);
+    }
+
+    /// @dev Whatever the pools, a winner never nets less than they staked, and the fee never exceeds 3% of the pot.
+    function testFuzz_winnerNeverNetsLessThanStaked(uint96 winning, uint96 losing, bool outcome) public {
+        uint256 w = bound(winning, 1e15, 1_000 ether);
+        uint256 l = bound(losing, 1e15, 1_000 ether);
+        uint256 id = _create();
+        _stake(alice, id, 0, outcome ? 0 : 1, w);
+        _stake(bob, id, 0, outcome ? 1 : 0, l);
+        _resolve(id, true, outcome);
+        c.settle(id);
+        uint256 fee = c.totalBurned() + c.totalBuilderFees();
+        assertLe(fee, (w + l) * 300 / 10_000);
+        assertLe(fee, l);
+        assertGe(c.claimable(id, alice), w);
+        assertEq(c.claimable(id, alice) + fee, w + l);
+    }
+
+    /// @dev Finding 931492ce: an attestation issued further than ISSUED_AT_TOLERANCE ahead of the chain's clock is
+    ///      refused, as the protocol's consumer refuses it; one within the tolerance is accepted.
+    function test_rejectsIssuedAtInTheFuture() public {
+        uint256 id = _create();
+        AskRef[] memory refs = _refs(id);
+        IOracleAttestation.Attestation memory a = _attestation(id, refs[0], true);
+        a.issuedAt = uint64(block.timestamp + 365 days);
+        a.expiresAt = uint64(block.timestamp + 366 days);
+        // deliverRaw calls from the Intake's address without marking the request completed, so the same ask can be
+        // tried again below.
+        assertFalse(intake.deliverRaw(address(c), _call(refs[0].requestId, a, _sign(a, signerKey))));
+        assertEq(c.getMarket(id).answers[0], 0);
+        assertEq(c.getMarket(id).openAsks[0], 1);
+        a.issuedAt = uint64(block.timestamp + c.ISSUED_AT_TOLERANCE() + 1);
+        assertFalse(intake.deliverRaw(address(c), _call(refs[0].requestId, a, _sign(a, signerKey))));
+        a.issuedAt = uint64(block.timestamp + c.ISSUED_AT_TOLERANCE());
+        assertTrue(_deliver(refs[0].requestId, a, _sign(a, signerKey)));
+        assertEq(c.getMarket(id).answers[0], 1);
+    }
+
+    /// @dev Finding 3425133b, case A: IMD refuses the fee recipient. The stakers still settle and claim; the fee is
+    ///      held as `owed` until the recipient can take it.
+    function test_blockedFeeRecipientDoesNotBlockSettlement() public {
+        uint256 id = _create();
+        _stake(alice, id, 0, 0, 100 ether);
+        _stake(bob, id, 0, 1, 100 ether);
+        _resolve(id, true, true);
+        imd.setBlocked(builder, true);
+        vm.expectEmit(true, false, false, true, address(c));
+        emit Conditionals.PaymentDeferred(builder, 2 ether);
+        assertEq(_claim(alice, id), 194 ether);
+        assertEq(imd.balanceOf(builder), 0);
+        assertEq(c.owed(builder), 2 ether);
+        assertEq(c.totalBuilderFees(), 2 ether);
+        assertEq(imd.balanceOf(DEAD), 4 ether);
+        assertEq(imd.balanceOf(address(c)), 2 ether);
+        vm.prank(builder);
+        vm.expectRevert("blocked");
+        c.withdrawOwed();
+        imd.setBlocked(builder, false);
+        vm.prank(builder);
+        assertEq(c.withdrawOwed(), 2 ether);
+        assertEq(imd.balanceOf(builder), 2 ether);
+        assertEq(c.owed(builder), 0);
+        vm.prank(builder);
+        vm.expectRevert(Conditionals.NothingToClaim.selector);
+        c.withdrawOwed();
+        assertEq(imd.balanceOf(address(c)), 0);
+    }
+
+    /// @dev Finding 3425133b, case B: IMD refuses the creator while the budget is unspent. The void still goes
+    ///      through and the stakers are refunded; the budget is held as `owed`.
+    function test_blockedCreatorDoesNotBlockVoid() public {
+        uint256 id = _create();
+        _book(id);
+        imd.setBlocked(creator, true);
+        vm.warp(resolveTime + 30 days + 1);
+        c.voidMarket(id);
+        assertEq(c.owed(creator), 1 ether);
+        assertEq(c.getMarket(id).budget, 0);
+        assertEq(_claim(alice, id), 35 ether);
+        assertEq(_claim(bob, id), 70 ether);
+        assertEq(_claim(carol, id), 40 ether);
+        assertEq(_claim(dave, id), 60 ether);
+        assertEq(imd.balanceOf(address(c)), 1 ether);
+        imd.setBlocked(creator, false);
+        vm.prank(creator);
+        assertEq(c.withdrawOwed(), 1 ether);
+        assertEq(imd.balanceOf(address(c)), 0);
+    }
+
+    /// @dev A staker's own claim is still a plain transfer: IMD refusing them reverts their claim only.
+    function test_blockedStakerOnlyBlocksTheirOwnClaim() public {
+        uint256 id = _create();
+        _book(id);
+        _resolve(id, true, true);
+        imd.setBlocked(bob, true);
+        imd.setBlocked(carol, true);
+        assertEq(_claim(alice, id), 102 ether);
+        vm.prank(carol);
+        vm.expectRevert("blocked");
+        c.claim(id);
+        assertEq(_claim(dave, id), 60 ether);
+    }
+
+    /// @dev Finding d2cd6ea6: an ask pays the Intake's live price when it is below the market's snapshot, so a price
+    ///      cut is not overpaid from the creator's budget. The unspent budget comes back at settlement.
+    function test_askPaysTheLivePriceWhenItIsLower() public {
+        uint256 id = _create();
+        _book(id);
+        intake.setPrice(0.25 ether);
+        uint256 payeeBefore = imd.balanceOf(intake.PAYEE());
+        AskRef[] memory refs = _request(id);
+        assertEq(refs.length, 2);
+        assertEq(imd.balanceOf(intake.PAYEE()) - payeeBefore, 0.5 ether);
+        assertEq(c.getMarket(id).budget, 0.5 ether);
+        assertEq(c.totalOracleSpend(), 0.5 ether);
+        // A failure then a caller-paid retry costs the caller the live price too.
+        assertTrue(intake.fail(refs[0].requestId, 2, "disagreed"));
+        assertTrue(_answer(id, refs[1], true));
+        // The second ask of the condition is paid from what is left of the budget.
+        vm.roll(block.number + 5);
+        AskRef[] memory retry = _request(id);
+        assertEq(c.getMarket(id).budget, 0.25 ether);
+        assertTrue(_answer(id, retry[0], true));
+        uint256 creatorBefore = imd.balanceOf(creator);
+        c.settle(id);
+        assertEq(imd.balanceOf(creator) - creatorBefore, 0.25 ether);
+    }
+
+    /// @dev An Intake without `priceOf` (an older version, a mock) is charged the market's snapshot.
+    function test_askPaysTheSnapshotWithoutALivePrice() public {
+        uint256 id = _create();
+        intake.setPriceOfReverts(true);
+        uint256 payeeBefore = imd.balanceOf(intake.PAYEE());
+        _request(id);
+        assertEq(imd.balanceOf(intake.PAYEE()) - payeeBefore, 1 ether);
+        assertEq(c.getMarket(id).budget, 0);
+    }
+
+    /// @dev A live price above the snapshot is refused by the Intake: the caller never pays more than the price the
+    ///      market was created with, and the market voids at voidAfter, as the README says.
+    function test_askRevertsWhenTheLivePriceIsHigher() public {
+        uint256 id = _create();
+        _book(id);
+        intake.setPrice(0.6 ether);
+        vm.warp(resolveTime);
+        vm.expectRevert("PriceNotMet");
+        c.requestResolution(id);
+        assertTrue(c.askable(id, 0));
+        vm.warp(resolveTime + 30 days + 1);
+        assertTrue(c.voidable(id));
+        c.voidMarket(id);
+        assertEq(_claim(alice, id), 35 ether);
+    }
+
+    /// @dev Finding 17efe772: a proposed configuration lapses CONFIG_WINDOW after its delay, so it cannot sit for
+    ///      months and be activated under a creator who read the configuration long after the proposal.
+    function test_pendingConfigExpires() public {
+        Conditionals.OracleConfig memory next = _config();
+        next.signer = address(0xBEEF);
+        vm.startPrank(owner);
+        c.proposeOracleConfig(next);
+        uint256 at = c.pendingOracleConfigAt();
+        vm.warp(at + c.CONFIG_WINDOW() + 1);
+        vm.expectRevert(Conditionals.ConfigExpired.selector);
+        c.activateOracleConfig();
+        // Re-proposing starts the delay again.
+        c.proposeOracleConfig(next);
+        vm.expectRevert(Conditionals.TooEarly.selector);
+        c.activateOracleConfig();
+        vm.warp(block.timestamp + 3 days + 7 days);
+        c.activateOracleConfig();
+        vm.stopPrank();
+        (, address s,,,,) = c.oracleConfig();
+        assertEq(s, address(0xBEEF));
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
     // Fuzz: payouts never exceed what the market holds
     // ---------------------------------------------------------------------------------------------------------------
 

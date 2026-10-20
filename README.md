@@ -33,8 +33,12 @@ to the outcome: "if the Clarity Act passes, ETH above $5k is 62%; if it doesn't,
    - The world that did not happen is refunded in full.
    - In the world that happened, the winning side splits the pot minus **3%**: **2% is burned** (sent to
      `0x000000000000000000000000000000000000dEaD`, because IMD reverts on transfers to the zero address) and **1% goes to
-     the fee recipient**.
+     the fee recipient**. The fee is **capped at what the losing side staked** (split 2:1 the same way), so a winner
+     never nets less than they staked: a 0.001 IMD counter-stake cannot turn a one-sided world into a 3% loss.
    - A world with stakes on only one side has no counterparty and is refunded with no fee.
+   - The burn, the fee and the creator's unspent budget are pushed in the same transaction. If IMD refuses one of
+     those transfers (its owner can block an address), the amount is credited to `owed` and that party collects it
+     with `withdrawOwed()`; the stakers' settlement, void and claims go through regardless.
 6. **Void.** With no usable answer 30 days after `resolveTime`, anyone can call `voidMarket`: every stake is refunded.
    A void waits while an unanswered question has an ask less than a day old still live, so an answer on its way
    cannot be voided away; `voidable(marketId)` says whether it would succeed now.
@@ -50,8 +54,9 @@ to the outcome: "if the Clarity Act passes, ETH above $5k is 62%; if it doesn't,
 ## Trust and limits
 
 - **No admin over markets.** The owner can only (a) propose a new oracle configuration (Intake, signer, price, panel
-  size, quorum, action id), activatable after a 3 day delay and applying to markets created afterwards, and (b) change the fee
-  recipient. Each market keeps the configuration it was created with. There is no pause, no withdraw and no upgrade.
+  size, quorum, action id), activatable after a 3 day delay and within the 7 days after it (`CONFIG_WINDOW`; a
+  proposal not activated by then lapses and must be proposed again), applying to markets created afterwards, and
+  (b) change the fee recipient. Each market keeps the configuration it was created with. There is no pause, no withdraw and no upgrade.
 - **The oracle** is trusted as IMD documents it: the panel's honesty and the attester's key. The writer cannot forge
   an answer; a withheld one ends in a retry or a void. Answers are for moderate value and decisions that can wait.
 - **Text** is printable ASCII without `"` or `\`, so the question needs no JSON escaping and the hash the contract
@@ -59,13 +64,17 @@ to the outcome: "if the Clarity Act passes, ETH above $5k is 62%; if it doesn't,
   exactly an address or a 32-byte hex string. Lengths: condition and outcome up to 280 bytes, rules up to 500.
 - **Questions are public** and reach the oracle's agents as written. The oracle refuses ambiguous or unanswerable
   questions; such a market ends in a void.
-- **Price changes.** Each market pays the Intake price it was created with. If the Intake raises its price, that
-  market's asks revert and it is voided after 30 days.
+- **Price changes.** Each market pays at most the Intake price it was created with: an ask reads the Intake's live
+  price (`priceOf`) and pays it when it is lower, so a price cut is not overpaid from the creator's budget. If the
+  Intake raises its price, that market's asks revert and it is voided after 30 days; the caller of
+  `requestResolution` never pays more than the snapshot price.
 - **Close before it is known.** Staking is open until `closeTime`, which the creator chooses (at or before
   `resolveTime`). A market whose condition or outcome becomes public before `closeTime` can be staked on with that
   knowledge, as in any prediction market; creators should close trading before either can be known. The frontend
   says so when a market is created.
 - **Rounding.** Payouts round down; at most a few wei per market stay in the contract.
+- **Answer freshness.** An attestation is refused when expired or when `issuedAt` is more than 5 minutes ahead of
+  the chain's clock, as the protocol's own consumer refuses it.
 
 ## Contracts
 
@@ -93,7 +102,9 @@ FORK_ROBINHOOD=1 forge test --mc Fork       # the real Robinhood Chain Intake ta
   an ERC-1271 signer registry, another question, another window, another market, weak panel, expired, wrong type,
   malformed answer, tampered fields, replay, calls not from the Intake), callback gas under the Intake's 200,000
   limit, every settlement path in both worlds, one-sided worlds, failures and retries, voids and the void guard,
-  owner configuration (including the action id and the creator's deposit cap) and a fuzzed conservation test.
+  owner configuration (including the action id, the creator's deposit cap and the proposal's activation window),
+  the fee cap at the losing pool (unit and fuzz), deferred payments when IMD blocks the fee recipient or the
+  creator, the live-price read, the `issuedAt` tolerance, and a fuzzed conservation test.
 - `test/OracleConformance.t.sol`: the protocol's conformance vector. The contract, deployed at the vector's address
   on the vector's chain, reproduces the protocol's EIP-712 digest, its callback selector is the canonical one, the
   protocol's own signature verifies against that digest, and a fresh answer from the vector's key is accepted as the

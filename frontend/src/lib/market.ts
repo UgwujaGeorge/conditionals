@@ -24,13 +24,18 @@ export function impact(m: MarketView): number | null {
   return a === null || b === null ? null : (a - b) * 100;
 }
 
-/** Payout multiple on a winning side, after the 3% fee. */
+/** The fee on a settled world: 3% of the pot, capped at the losing pool so a winner never nets less than staked. */
+export function worldFee(winning: number, losing: number) {
+  return Math.min(((winning + losing) * RULES.feeBps) / 10_000, losing);
+}
+
+/** Payout multiple on a winning side, after the fee. */
 export function multiple(m: MarketView, w: World, s: Side, extra = 0): number | null {
   const pool = m.pools[w][s] + extra;
   const other = m.pools[w][s === 0 ? 1 : 0];
   if (pool === 0) return null;
   if (other === 0) return 1;
-  return ((pool + other) * (1 - RULES.feeBps / 10_000)) / pool;
+  return (pool + other - worldFee(pool, other)) / pool;
 }
 
 /** What a new stake would pay if its world happens and its side wins. */
@@ -39,7 +44,7 @@ export function estimatePayout(m: MarketView, w: World, s: Side, amount: number)
   const pool = m.pools[w][s] + amount;
   const other = m.pools[w][s === 0 ? 1 : 0];
   if (other === 0) return amount;
-  return (amount * (pool + other) * (1 - RULES.feeBps / 10_000)) / pool;
+  return (amount * (pool + other - worldFee(pool, other))) / pool;
 }
 
 export type Stage = "trading" | "closed" | "resolving" | "voidable" | "settled" | "voided";

@@ -82,6 +82,104 @@ maxBudget)` when the active configuration charges more.
   deposit it expects. `test/ConditionalsFork.t.sol`, `test/ConditionalsInvariant.t.sol` likewise.
   `frontend/src/hooks/useLiveMarkets.ts` passes the 1 IMD deposit it shows.
 
+## Revision: the independent review's findings
+
+Each finding was reproduced on the accepted tree before anything changed. Answers are in `.imd-responses.json`.
+
+### b57733eb (medium) - a 0.001 IMD counter-stake charged the 3% fee on the winners' principal: fixed
+
+Reproduced: the proof `Proof_b57733eb72d5.t.sol` failed on the accepted tree with `970000970000000000000 <
+1000000000000000000000`. `_settle` charged `BURN_BPS + BUILDER_BPS` on the whole pot whenever both pools were
+non-empty, so a MIN_STAKE on the empty side of a one-sided world cost the winners 3% of their own stake and paid the
+fee recipient 1% of it. The fee is now capped at the losing pool (`fee = min(3% of pot, losing pool)`, split 2:1
+between the burn and the fee recipient as before), the first of the finding's options: the brief's 3% of the pot
+stays wherever the losing side covers it, and a winner never nets less than they staked. The invariant
+`invariant_feesBounded` (fees at most 3% of what was staked) still holds.
+
+The proof itself cannot pass against any fix: its lines 104-106 assert the defective amounts (`paid ==
+970000970000000000000`, the fee recipient paid 10.00001 IMD) and line 109 asserts `paid >= 1000 IMD`. On this tree it
+fails at line 104 with `1000000000000000000000 != 970000970000000000000`, which is the fixed payout. The finding is
+answered `disputed` for that reason, with the fix in place and the scenario covered by the suite.
+
+- `src/Conditionals.sol`: `_settle`; header comment.
+- `test/Conditionals.t.sol`: `test_feeIsCappedAtTheLosingPool` (the reviewer's scenario: the whale receives exactly
+  1000 IMD, the fee is the 0.001 IMD dust), `test_feeIsThreePercentOfThePotWhenTheLosingPoolCoversIt` (above and
+  exactly at the cap), `testFuzz_winnerNeverNetsLessThanStaked`.
+- `frontend/src/lib/market.ts` (`worldFee`, `multiple`, `estimatePayout`), `frontend/src/hooks/useDemoMarkets.ts`
+  (demo settlement) and `frontend/src/components/MarketDrawer.tsx` (fee copy) mirror the cap. `README.md` step 5.
+
+### 3425133b (low) - third-party pushes inside the stakers' transaction: fixed
+
+Reproduced with a mock IMD whose `_update` reverts for a blocked address (the live IMD answers `blocked(address)`):
+with the fee recipient blocked, `settle` and every `claim` reverted and `voidMarket` reverted `NotVoidable`; with
+the creator blocked and the budget unspent, `voidMarket` reverted. The burn, the fee and the budget return now go
+through `_push`, which tries the transfer and, if IMD refuses it, credits `owed[to]` and emits `PaymentDeferred`
+instead; the party collects it with `withdrawOwed()`. A staker's own claim is still a plain `safeTransfer`: IMD
+refusing a staker reverts that staker's claim only.
+
+- `src/Conditionals.sol`: `owed`, `withdrawOwed`, `_push`, `_settle`, `_returnBudget`, events `PaymentDeferred`
+  and `OwedWithdrawn`.
+- `test/utils/Mocks.sol`: `MockIMD.setBlocked`. `test/Conditionals.t.sol`:
+  `test_blockedFeeRecipientDoesNotBlockSettlement`, `test_blockedCreatorDoesNotBlockVoid`,
+  `test_blockedStakerOnlyBlocksTheirOwnClaim`. `README.md` step 5.
+
+### d2cd6ea6 (low) - asks paid the snapshot price, never the live one: fixed for a lower price
+
+Reproduced: with the Intake's price at 0.25 IMD the two asks still paid 1 IMD and the creator got nothing back.
+`_askPrice` now reads `priceOf(action, imd)` on the Intake and pays the live price when it is below the market's
+snapshot; the unspent budget comes back at settlement or void. The read is a `try`: an Intake without `priceOf` (a
+mock, an older version) is charged the snapshot, so a buyer's mock need not implement it. `priceOf` is declared in a
+separate `IIntakePrice` interface for the same reason (the proofs' mocks implement `IIntake`).
+
+A live price above the snapshot still reverts at the Intake and the market voids at `voidAfter`, as the README
+documented: the alternative, pulling the difference from the caller of `requestResolution`, would charge a
+volunteer an amount the Intake's owner sets, the pattern finding 30115fb4 asked to remove from `createMarket`.
+The caller never pays more than the snapshot (bounded by `MAX_PRICE`).
+
+- `src/Conditionals.sol`: `_askPrice`, `_ask`. `src/interfaces/IIntake.sol`: `IIntakePrice`.
+- `test/utils/Mocks.sol`: `MockIntake.price`, `setPrice`, `priceOf`, `setPriceOfReverts`.
+  `test/Conditionals.t.sol`: `test_askPaysTheLivePriceWhenItIsLower`, `test_askPaysTheSnapshotWithoutALivePrice`,
+  `test_askRevertsWhenTheLivePriceIsHigher`. `README.md` "Price changes".
+
+### 931492ce (low) - no `issuedAt` check: fixed
+
+Reproduced: an attestation with `issuedAt` a year ahead was accepted. `onOracleResult` now refuses
+`a.issuedAt > block.timestamp + ISSUED_AT_TOLERANCE` (5 minutes, the protocol consumer's constant) alongside the
+expiry check. The check stays inline rather than inheriting `OracleAttestationConsumer`, because the contract
+verifies against each market's snapshotted signer, not one owner-settable signer.
+
+- `src/Conditionals.sol`: `ISSUED_AT_TOLERANCE`, `onOracleResult`.
+- `test/Conditionals.t.sol`: `test_rejectsIssuedAtInTheFuture` (a year ahead and tolerance + 1 refused, exactly the
+  tolerance accepted). `README.md` "Answer freshness".
+
+### 17efe772 (low) - a pending configuration never expires: fixed with an activation window
+
+Reproduced: a proposal could be activated months after its delay, in the block a market was created. A proposal is
+now activatable only between `CONFIG_DELAY` and `CONFIG_DELAY + CONFIG_WINDOW` (7 days, a value the brief leaves
+open) after it was proposed; later it lapses (`ConfigExpired`) and must be proposed again, so every configuration a
+creator can meet was announced at most 10 days earlier. The finding's other option, a configuration pin in
+`createMarket`, was not taken: it changes the creator-facing ABI again for an exposure that is the creator's own 1
+IMD budget, and the brief gives the owner the choice of oracle for future markets.
+
+- `src/Conditionals.sol`: `CONFIG_WINDOW`, `ConfigExpired`, `activateOracleConfig`.
+- `test/Conditionals.t.sol`: `test_pendingConfigExpires`. `README.md` "No admin over markets".
+
+### 427f0607 (info) - `onFailure` NatSpec said RETRY_DELAY: fixed in the comment
+
+Reproduced: `_askable` allows an immediate re-ask after a failure, as the README and
+`test_failureThenRetryPaidByCaller` say; only the NatSpec said otherwise. The comment now matches the code; the
+caller pays the retry, so nobody else loses by an immediate re-ask.
+
+### f2b2f269, 1b5229b4, 167b3d1e (info) - not changed
+
+- Rounding dust: reproduced (at most winners - 1 wei per market, documented in the README). Paying the remainder to
+  the last claimant needs a count of unclaimed winners per market; not worth the storage for wei.
+- `claim()` by a non-staker settles then reverts `NothingToClaim`: reproduced; gas only, and `settle()` is the
+  function for settling without a payout. A `claim` that returns 0 for some callers and reverts for others would be
+  a worse interface.
+- `feeRecipient` read at settlement: reproduced; the brief gives the owner `setFeeRecipient`, the amount is fixed
+  by the contract and stakes are untouched. With b57733eb fixed the recipient has no lever on one-sided worlds.
+
 ## Added for the oracle-consumer reference
 
 - `test/OracleConformance.t.sol`: the protocol's conformance vector adapted to this contract. Deployed at the
@@ -103,5 +201,7 @@ maxBudget)` when the active configuration charges more.
 ## Checks run
 
 `forge build` and `forge test` with `FOUNDRY_FUZZ_SEED=0x454e988217fa2b344b583d22689e3faa5b48f3f8dea6fa7a68e7caa6cf942db6`:
-56 tests pass (49 unit and fuzz, 4 conformance, 3 invariants, 1 fork test that returns without an RPC). The fork
-test (`FORK_ROBINHOOD=1`) was not run here; it needs the network.
+66 tests pass (60 unit and fuzz, 4 conformance, 1 invariant suite of 3 invariants, 1 fork test that returns without
+an RPC). The fork test (`FORK_ROBINHOOD=1`) was not run here; it needs the network. Runtime size 19,654 bytes.
+The held proof `Proof_b57733eb72d5.t.sol` fails on this tree at its own line 104 (see b57733eb above).
+`frontend/src/lib/abi.ts` was regenerated with `node frontend/scripts/gen-abi.mjs`.

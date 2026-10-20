@@ -281,7 +281,8 @@ function StakeBox({
               : src.pending ?? `Stake ${fmtImd(value)} IMD on ${side === 0 ? "YES" : "NO"} in ${st.name}`}
       </button>
       <p className="mt-3 text-center text-xs text-mute">
-        3% of the winning world&apos;s pot is taken at settlement: 2% burned, 1% to the builder.
+        3% of the winning world&apos;s pot is taken at settlement: 2% burned, 1% to the builder. The fee never
+        exceeds the losing side&apos;s stakes, so a winner never nets less than staked.
       </p>
     </div>
   );

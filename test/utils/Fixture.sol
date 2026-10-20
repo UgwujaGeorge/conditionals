@@ -52,7 +52,7 @@ abstract contract Fixture is Test {
 
     function _create() internal returns (uint256 id) {
         vm.prank(creator);
-        id = c.createMarket(CONDITION, OUTCOME, RULES, closeTime, resolveTime);
+        id = c.createMarket(CONDITION, OUTCOME, RULES, closeTime, resolveTime, 1 ether);
     }
 
     function _stake(address who, uint256 id, uint8 world, uint8 side, uint256 amount) internal {
@@ -157,6 +157,18 @@ abstract contract Fixture is Test {
     function _answer(uint256 id, AskRef memory ref, bool value) internal returns (bool) {
         IOracleAttestation.Attestation memory a = _attestation(id, ref, value);
         return _deliver(ref.requestId, a, _sign(a, signerKey));
+    }
+
+    /// @dev The config the fixture deploys with, as a struct the owner could propose.
+    function _config() internal view returns (Conditionals.OracleConfig memory) {
+        return Conditionals.OracleConfig({
+            intake: IIntake(address(intake)),
+            signer: signer,
+            price: 0.5 ether,
+            panelSize: 5,
+            quorum: 4,
+            action: bytes32("oracle.request@oracle-1")
+        });
     }
 
     /// @dev Requests and answers both questions.

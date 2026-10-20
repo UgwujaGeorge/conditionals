@@ -48,7 +48,7 @@ contract Handler is Test {
     function create(uint32 closeIn, uint32 extra) external {
         uint64 close = uint64(block.timestamp + bound(closeIn, 1, 10 days));
         uint64 resolve = uint64(close + bound(extra, 0, 10 days));
-        c.createMarket("Condition happens", "Outcome happens", "Use public sources.", close, resolve);
+        c.createMarket("Condition happens", "Outcome happens", "Use public sources.", close, resolve, 1 ether);
         budgetsIn += 1 ether;
     }
 
@@ -113,7 +113,7 @@ contract Handler is Test {
         if (c.settleable(id)) {
             c.settle(id);
             budgetsOut += m.budget;
-        } else if (block.timestamp > m.voidAfter) {
+        } else if (c.voidable(id)) {
             c.voidMarket(id);
             budgetsOut += m.budget;
         }

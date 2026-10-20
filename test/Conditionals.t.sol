@@ -7,6 +7,7 @@ import {Conditionals} from "../src/Conditionals.sol";
 import {IIntake} from "../src/interfaces/IIntake.sol";
 import {IOracleAttestation} from "../src/interfaces/IOracleAttestation.sol";
 import {Fixture} from "./utils/Fixture.sol";
+import {MockSignerRegistry} from "./utils/Mocks.sol";
 
 contract ConditionalsTest is Fixture {
     // ---------------------------------------------------------------------------------------------------------------
@@ -58,7 +59,8 @@ contract ConditionalsTest is Fixture {
             "Bitcoin closed above 100000 USD on Coinbase on 2025-10-01",
             "Use the official FOMC statements on federalreserve.gov and the Coinbase BTC-USD daily close (UTC).",
             uint64(1_760_000_100),
-            uint64(1_760_000_200)
+            uint64(1_760_000_200),
+            1 ether
         );
         assertEq(address(c), 0xF62849F9A0B5Bf2913b396098F7c7019b51A820a, "fixture address is part of the vector");
         assertEq(
@@ -137,6 +139,7 @@ contract ConditionalsTest is Fixture {
         assertEq(m.oracle.signer, signer);
         assertEq(m.oracle.panelSize, 5);
         assertEq(m.oracle.quorum, 4);
+        assertEq(m.oracle.action, bytes32("oracle.request@oracle-1"));
         assertEq(m.voidAfter, resolveTime + 30 days);
         assertEq(m.condition, CONDITION);
     }
@@ -144,23 +147,30 @@ contract ConditionalsTest is Fixture {
     function test_createRejectsBadText() public {
         vm.startPrank(creator);
         vm.expectRevert(Conditionals.InvalidText.selector);
-        c.createMarket("", OUTCOME, RULES, closeTime, resolveTime);
+        c.createMarket("", OUTCOME, RULES, closeTime, resolveTime, 1 ether);
         vm.expectRevert(Conditionals.InvalidText.selector);
-        c.createMarket("has a \"quote\"", OUTCOME, RULES, closeTime, resolveTime);
+        c.createMarket("has a \"quote\"", OUTCOME, RULES, closeTime, resolveTime, 1 ether);
         vm.expectRevert(Conditionals.InvalidText.selector);
-        c.createMarket("back\\slash", OUTCOME, RULES, closeTime, resolveTime);
+        c.createMarket("back\\slash", OUTCOME, RULES, closeTime, resolveTime, 1 ether);
         vm.expectRevert(Conditionals.InvalidText.selector);
-        c.createMarket("new\nline", OUTCOME, RULES, closeTime, resolveTime);
+        c.createMarket("new\nline", OUTCOME, RULES, closeTime, resolveTime, 1 ether);
         vm.expectRevert(Conditionals.InvalidText.selector);
-        c.createMarket(unicode"café", OUTCOME, RULES, closeTime, resolveTime);
+        c.createMarket(unicode"café", OUTCOME, RULES, closeTime, resolveTime, 1 ether);
         vm.expectRevert(Conditionals.InvalidText.selector);
-        c.createMarket(CONDITION, OUTCOME, "0x5598aa9146215bc13eb26f2c692ad1461fd32982", closeTime, resolveTime);
-        vm.expectRevert(Conditionals.InvalidText.selector);
-        c.createMarket(CONDITION, _repeat("a", 281), RULES, closeTime, resolveTime);
-        vm.expectRevert(Conditionals.InvalidText.selector);
-        c.createMarket(CONDITION, OUTCOME, string.concat("a ", _repeat("b", 499)), closeTime, resolveTime);
         c.createMarket(
-            _repeat("a", 280), _repeat("b", 280), string.concat("a ", _repeat("b", 498)), closeTime, resolveTime
+            CONDITION, OUTCOME, "0x5598aa9146215bc13eb26f2c692ad1461fd32982", closeTime, resolveTime, 1 ether
+        );
+        vm.expectRevert(Conditionals.InvalidText.selector);
+        c.createMarket(CONDITION, _repeat("a", 281), RULES, closeTime, resolveTime, 1 ether);
+        vm.expectRevert(Conditionals.InvalidText.selector);
+        c.createMarket(CONDITION, OUTCOME, string.concat("a ", _repeat("b", 499)), closeTime, resolveTime, 1 ether);
+        c.createMarket(
+            _repeat("a", 280),
+            _repeat("b", 280),
+            string.concat("a ", _repeat("b", 498)),
+            closeTime,
+            resolveTime,
+            1 ether
         );
         vm.stopPrank();
     }
@@ -168,13 +178,38 @@ contract ConditionalsTest is Fixture {
     function test_createRejectsBadTimes() public {
         vm.startPrank(creator);
         vm.expectRevert(Conditionals.InvalidTimes.selector);
-        c.createMarket(CONDITION, OUTCOME, RULES, uint64(block.timestamp), resolveTime);
+        c.createMarket(CONDITION, OUTCOME, RULES, uint64(block.timestamp), resolveTime, 1 ether);
         vm.expectRevert(Conditionals.InvalidTimes.selector);
-        c.createMarket(CONDITION, OUTCOME, RULES, resolveTime, closeTime);
+        c.createMarket(CONDITION, OUTCOME, RULES, resolveTime, closeTime, 1 ether);
         vm.expectRevert(Conditionals.InvalidTimes.selector);
-        c.createMarket(CONDITION, OUTCOME, RULES, closeTime, uint64(block.timestamp + 731 days));
-        c.createMarket(CONDITION, OUTCOME, RULES, closeTime, closeTime);
+        c.createMarket(CONDITION, OUTCOME, RULES, closeTime, uint64(block.timestamp + 731 days), 1 ether);
+        c.createMarket(CONDITION, OUTCOME, RULES, closeTime, closeTime, 1 ether);
         vm.stopPrank();
+    }
+
+    /// @dev Audit 30115fb4: the creator caps what createMarket may pull, so a configuration activated in the same
+    ///      block cannot charge more than they agreed to.
+    function test_createRejectsBudgetAboveTheCreatorsCap() public {
+        Conditionals.OracleConfig memory next = _config();
+        next.price = 10 ether;
+        vm.prank(owner);
+        c.proposeOracleConfig(next);
+        vm.warp(block.timestamp + 3 days);
+        closeTime = uint64(block.timestamp + 7 days);
+        resolveTime = uint64(block.timestamp + 14 days);
+        // The activation lands first in the block; the creator's call, sent for 1 IMD, reverts instead of paying 20.
+        vm.prank(owner);
+        c.activateOracleConfig();
+        uint256 before = imd.balanceOf(creator);
+        vm.prank(creator);
+        vm.expectRevert(abi.encodeWithSelector(Conditionals.BudgetTooHigh.selector, 20 ether, 1 ether));
+        c.createMarket(CONDITION, OUTCOME, RULES, closeTime, resolveTime, 1 ether);
+        assertEq(imd.balanceOf(creator), before);
+        // A creator who agrees to the new price can still create.
+        vm.prank(creator);
+        uint256 id = c.createMarket(CONDITION, OUTCOME, RULES, closeTime, resolveTime, 20 ether);
+        assertEq(c.getMarket(id).budget, 20 ether);
+        assertEq(before - imd.balanceOf(creator), 20 ether);
     }
 
     function test_stakeRecordsPoolsAndStakes() public {
@@ -256,24 +291,73 @@ contract ConditionalsTest is Fixture {
         assertEq(imd.balanceOf(address(c)), 0);
     }
 
-    function test_conditionFalseSettlesWithoutOutcome() public {
+    /// @dev Audit b48a22f9: world 1 is judged on the outcome like world 0. The condition being false alone does not
+    ///      settle; the outcome is still asked and decides the side.
+    function test_conditionFalseWaitsForTheOutcome() public {
         uint256 id = _create();
         _book(id);
         AskRef[] memory refs = _request(id);
         assertTrue(_answer(id, refs[0], false));
-        assertTrue(c.settleable(id));
-        // The outcome answer is no longer needed, and is ignored when it arrives after settlement.
+        assertFalse(c.settleable(id));
+        vm.expectRevert(Conditionals.NotSettleable.selector);
         c.settle(id);
-        assertTrue(_answer(id, refs[1], true));
-        // World 1 pot 105: fee 3.15 (burn 2.1, builder 1.05), net 101.85. NO pool 65: dave 60, alice 5.
+        // The outcome ask is still live and, once failed, can be asked again.
+        assertTrue(intake.fail(refs[1].requestId, 2, "disagreed"));
+        assertTrue(c.askable(id, 1));
+        assertFalse(c.askable(id, 0));
+        vm.roll(block.number + 5);
+        AskRef[] memory retry = _request(id);
+        assertEq(retry.length, 1);
+        assertEq(retry[0].question, 1);
+        assertTrue(_answer(id, retry[0], true));
+        assertTrue(c.settleable(id));
+    }
+
+    function test_conditionFalseOutcomeYes() public {
+        uint256 id = _create();
+        _book(id);
+        _resolve(id, false, true);
+        c.settle(id);
+        Conditionals.Market memory m = c.getMarket(id);
+        assertEq(m.world, 1);
+        assertEq(m.winningSide, 0);
+        // World 1 pot 105: fee 3.15 (burn 2.1, builder 1.05), net 101.85, all to carol's 40 YES.
+        assertEq(_claim(carol, id), 101.85 ether);
+        assertEq(_claim(alice, id), 30 ether);
+        assertEq(_claim(bob, id), 70 ether);
+        assertEq(_claimOrZero(dave, id), 0);
+        assertEq(imd.balanceOf(builder), 1.05 ether);
+        assertEq(c.totalBurned(), 2.1 ether);
+        assertEq(imd.balanceOf(address(c)), 0);
+        assertEq(m.budget, 0);
+    }
+
+    function test_conditionFalseOutcomeNo() public {
+        uint256 id = _create();
+        _book(id);
+        _resolve(id, false, false);
+        // NO pool 65: dave 60, alice 5.
         assertEq(_claim(dave, id), uint256(101.85 ether) * 60 / 65);
         assertEq(_claim(alice, id), 30 ether + uint256(101.85 ether) * 5 / 65);
         assertEq(_claim(bob, id), 70 ether);
         assertEq(_claimOrZero(carol, id), 0);
         assertEq(imd.balanceOf(builder), 1.05 ether);
         assertLe(imd.balanceOf(address(c)), 2);
-        // Budget returned to creator: nothing left, both questions were paid.
         assertEq(c.getMarket(id).budget, 0);
+    }
+
+    /// @dev The audit's reproduction: alice YES and bob NO in world 1, outcome TRUE delivered before condition FALSE.
+    function test_world1YesWinsWhenOutcomeTrue() public {
+        uint256 id = _create();
+        _stake(alice, id, 1, 0, 10 ether);
+        _stake(bob, id, 1, 1, 20 ether);
+        AskRef[] memory refs = _request(id);
+        assertTrue(_answer(id, refs[1], true));
+        assertTrue(_answer(id, refs[0], false));
+        c.settle(id);
+        assertEq(c.getMarket(id).world, 1);
+        assertEq(c.claimable(id, alice), 29.1 ether);
+        assertEq(c.claimable(id, bob), 0);
     }
 
     function test_outcomeAnsweredBeforeCondition() public {
@@ -347,6 +431,61 @@ contract ConditionalsTest is Fixture {
         assertFalse(_deliver(refs[0].requestId, a, _sign(a, 0xB0B)));
         assertEq(c.getMarket(id).answers[0], 0);
         assertEq(c.getMarket(id).openAsks[0], 1);
+        // Garbage, and a signature over another digest, are refused too.
+        assertFalse(intake.deliverRaw(address(c), _call(refs[0].requestId, a, hex"")));
+        assertFalse(intake.deliverRaw(address(c), _call(refs[0].requestId, a, new bytes(65))));
+    }
+
+    /// @dev Audit d83d44e0: the signer may be a contract answering ERC-1271 (the protocol's signer registry), so
+    ///      the oracle can rotate keys without stranding open markets.
+    function test_acceptsAnErc1271SignerRegistry() public {
+        MockSignerRegistry registry = new MockSignerRegistry();
+        uint256 keyA = 0xAAA1;
+        uint256 keyB = 0xBBB2;
+        registry.set(vm.addr(keyA), true);
+        Conditionals.OracleConfig memory next = _config();
+        next.signer = address(registry);
+        vm.prank(owner);
+        c.proposeOracleConfig(next);
+        vm.warp(block.timestamp + 3 days);
+        vm.prank(owner);
+        c.activateOracleConfig();
+        closeTime = uint64(block.timestamp + 7 days);
+        resolveTime = uint64(block.timestamp + 14 days);
+
+        uint256 id = _create();
+        assertEq(c.getMarket(id).oracle.signer, address(registry));
+        AskRef[] memory refs = _refs(id);
+        // A key the registry does not list is refused; the fixture's old EOA key too.
+        IOracleAttestation.Attestation memory a = _attestation(id, refs[0], true);
+        assertFalse(intake.deliverRaw(address(c), _call(refs[0].requestId, a, _sign(a, keyB))));
+        assertFalse(intake.deliverRaw(address(c), _call(refs[0].requestId, a, _sign(a, signerKey))));
+        assertEq(c.getMarket(id).answers[0], 0);
+        // The registry rotates to key B: accepted, under the Intake's gas limit.
+        registry.set(vm.addr(keyA), false);
+        registry.set(vm.addr(keyB), true);
+        assertTrue(_deliver(refs[0].requestId, a, _sign(a, keyB)));
+        assertEq(c.getMarket(id).answers[0], 1);
+        a = _attestation(id, refs[1], false);
+        assertTrue(_deliver(refs[1].requestId, a, _sign(a, keyB)));
+        c.settle(id);
+        assertEq(_claim(bob, id), 97 ether);
+    }
+
+    /// @dev A market keeps its own signer: the current configuration's signer cannot answer for it.
+    function test_rotatedSignerCannotAnswerAnOlderMarket() public {
+        uint256 id = _create();
+        Conditionals.OracleConfig memory next = _config();
+        next.signer = vm.addr(0xB0B);
+        vm.prank(owner);
+        c.proposeOracleConfig(next);
+        vm.warp(block.timestamp + 3 days);
+        vm.prank(owner);
+        c.activateOracleConfig();
+        AskRef[] memory refs = _refs(id);
+        IOracleAttestation.Attestation memory a = _attestation(id, refs[0], true);
+        assertFalse(_deliver(refs[0].requestId, a, _sign(a, 0xB0B)));
+        assertEq(c.getMarket(id).answers[0], 0);
     }
 
     function test_rejectsAnswerToAnotherQuestion() public {
@@ -361,8 +500,9 @@ contract ConditionalsTest is Fixture {
         assertFalse(intake.deliverRaw(address(c), _call(refs[0].requestId, a, _sign(a, signerKey))));
         // Another market's question, same text otherwise.
         vm.prank(creator);
-        uint256 other =
-            c.createMarket(CONDITION, OUTCOME, RULES, uint64(block.timestamp + 1), uint64(block.timestamp + 2));
+        uint256 other = c.createMarket(
+            CONDITION, OUTCOME, RULES, uint64(block.timestamp + 1), uint64(block.timestamp + 2), 1 ether
+        );
         a = _attestation(other, refs[0], true);
         assertFalse(intake.deliverRaw(address(c), _call(refs[0].requestId, a, _sign(a, signerKey))));
         assertEq(c.getMarket(id).answers[0], 0);
@@ -489,7 +629,10 @@ contract ConditionalsTest is Fixture {
         assertEq(retry[0].question, 0);
         assertEq(before - imd.balanceOf(address(this)), 0.5 ether);
         assertTrue(_answer(id, retry[0], false));
+        assertTrue(_answer(id, refs[1], true));
         c.settle(id);
+        assertEq(c.getMarket(id).world, 1);
+        assertEq(c.getMarket(id).winningSide, 0);
     }
 
     function test_unansweredAskCanBeRetriedAfterDelay() public {
@@ -536,9 +679,58 @@ contract ConditionalsTest is Fixture {
         _book(id);
         _resolve(id, false, false);
         vm.warp(resolveTime + 31 days);
+        assertFalse(c.voidable(id));
         vm.expectRevert(Conditionals.NotVoidable.selector);
         c.voidMarket(id);
         assertEq(_claim(dave, id), uint256(101.85 ether) * 60 / 65);
+    }
+
+    /// @dev Audit 3c993124: a void waits while an ask younger than RETRY_DELAY is live, so a loser cannot void a
+    ///      market whose answer is on its way.
+    function test_cannotVoidWhileAnAskIsLive() public {
+        uint256 id = _create();
+        _stake(alice, id, 0, 0, 10 ether);
+        _stake(bob, id, 0, 1, 20 ether);
+        vm.warp(resolveTime + 30 days - 1 hours);
+        AskRef[] memory refs = _request(id);
+        assertTrue(_answer(id, refs[0], true));
+        // The outcome ask is live and an hour old: at voidAfter + 1 bob cannot void.
+        vm.warp(resolveTime + 30 days + 1);
+        assertFalse(c.voidable(id));
+        vm.prank(bob);
+        vm.expectRevert(Conditionals.NotVoidable.selector);
+        c.voidMarket(id);
+        // The answer lands and settles YES: alice is paid, bob is not.
+        assertTrue(_answer(id, refs[1], true));
+        assertFalse(c.voidable(id));
+        assertEq(_claim(alice, id), 29.1 ether);
+        assertEq(_claimOrZero(bob, id), 0);
+    }
+
+    function test_voidAllowedOnceTheLiveAskIsStale() public {
+        uint256 id = _create();
+        uint256 id2 = _create();
+        _book(id);
+        // An ask at exactly voidAfter is allowed; it blocks a void for RETRY_DELAY, then the market can be voided.
+        vm.warp(resolveTime + 30 days);
+        AskRef[] memory refs = _request(id);
+        assertEq(refs.length, 2);
+        vm.warp(resolveTime + 30 days + 1 days - 1);
+        assertFalse(c.voidable(id));
+        vm.expectRevert(Conditionals.NotVoidable.selector);
+        c.voidMarket(id);
+        vm.warp(resolveTime + 30 days + 1 days);
+        assertTrue(c.voidable(id));
+        c.voidMarket(id);
+        // A failure clears the ask, so the void needs no wait.
+        vm.warp(resolveTime + 30 days);
+        AskRef[] memory refs2 = _request(id2);
+        assertTrue(intake.fail(refs2[0].requestId, 1, "body_refused"));
+        assertTrue(intake.fail(refs2[1].requestId, 1, "body_refused"));
+        vm.warp(resolveTime + 30 days + 1);
+        assertTrue(c.voidable(id2));
+        c.voidMarket(id2);
+        assertEq(_claim(alice, id), 35 ether);
     }
 
     function test_cannotRequestAfterVoidAfter() public {
@@ -568,7 +760,12 @@ contract ConditionalsTest is Fixture {
     function test_oracleConfigChangeIsDelayedAndOnlyAffectsNewMarkets() public {
         uint256 id = _create();
         Conditionals.OracleConfig memory next = Conditionals.OracleConfig({
-            intake: IIntake(address(0x1234)), signer: address(0x5678), price: 1 ether, panelSize: 9, quorum: 7
+            intake: IIntake(address(0x1234)),
+            signer: address(0x5678),
+            price: 1 ether,
+            panelSize: 9,
+            quorum: 7,
+            action: bytes32("oracle.request@oracle-2")
         });
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
@@ -582,12 +779,13 @@ contract ConditionalsTest is Fixture {
         c.activateOracleConfig();
         vm.stopPrank();
 
-        (IIntake i, address s, uint128 p, uint16 ps, uint16 qu) = c.oracleConfig();
+        (IIntake i, address s, uint128 p, uint16 ps, uint16 qu, bytes32 act) = c.oracleConfig();
         assertEq(address(i), address(0x1234));
         assertEq(s, address(0x5678));
         assertEq(p, 1 ether);
         assertEq(ps, 9);
         assertEq(qu, 7);
+        assertEq(act, bytes32("oracle.request@oracle-2"));
         // The existing market keeps its config and resolves with the original signer and intake.
         assertEq(c.getMarket(id).oracle.signer, signer);
         _book(id);
@@ -597,17 +795,42 @@ contract ConditionalsTest is Fixture {
         vm.warp(block.timestamp + 1);
         vm.prank(creator);
         uint256 id2 = c.createMarket(
-            CONDITION, OUTCOME, RULES, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days)
+            CONDITION, OUTCOME, RULES, uint64(block.timestamp + 1 days), uint64(block.timestamp + 2 days), 2 ether
         );
         assertEq(c.getMarket(id2).budget, 2 ether);
         assertEq(c.getMarket(id2).oracle.signer, address(0x5678));
+        assertEq(c.getMarket(id2).oracle.action, bytes32("oracle.request@oracle-2"));
+    }
+
+    /// @dev Audit bf75158c: the action id rotates with the configuration, so a retired action version does not
+    ///      strand future markets. The old market still asks with the action it was created with.
+    function test_rotatedActionIsUsedByNewMarkets() public {
+        uint256 id = _create();
+        Conditionals.OracleConfig memory next = _config();
+        next.action = bytes32("oracle.request@oracle-2");
+        vm.prank(owner);
+        c.proposeOracleConfig(next);
+        vm.warp(block.timestamp + 3 days);
+        vm.prank(owner);
+        c.activateOracleConfig();
+        closeTime = uint64(block.timestamp + 7 days);
+        resolveTime = uint64(block.timestamp + 14 days);
+        uint256 id2 = _create();
+        AskRef[] memory refs = _request(id);
+        AskRef[] memory refs2 = _request(id2);
+        (, bytes32 action,,,,,) = intake.requests(refs[0].requestId);
+        assertEq(action, bytes32("oracle.request@oracle-1"));
+        (, action,,,,,) = intake.requests(refs2[0].requestId);
+        assertEq(action, bytes32("oracle.request@oracle-2"));
+        (, action,,,,,) = intake.requests(refs2[1].requestId);
+        assertEq(action, bytes32("oracle.request@oracle-2"));
     }
 
     function test_oracleConfigBounds() public {
         vm.startPrank(owner);
-        Conditionals.OracleConfig memory cfg = Conditionals.OracleConfig({
-            intake: IIntake(address(intake)), signer: signer, price: 0.5 ether, panelSize: 4, quorum: 3
-        });
+        Conditionals.OracleConfig memory cfg = _config();
+        cfg.panelSize = 4;
+        cfg.quorum = 3;
         vm.expectRevert(Conditionals.InvalidConfig.selector);
         c.proposeOracleConfig(cfg);
         cfg.panelSize = 5;
@@ -625,6 +848,10 @@ contract ConditionalsTest is Fixture {
         vm.expectRevert(Conditionals.InvalidConfig.selector);
         c.proposeOracleConfig(cfg);
         cfg.price = 0.5 ether;
+        cfg.action = bytes32(0);
+        vm.expectRevert(Conditionals.InvalidConfig.selector);
+        c.proposeOracleConfig(cfg);
+        cfg.action = bytes32("oracle.request@oracle-1");
         cfg.signer = address(0);
         vm.expectRevert(Conditionals.ZeroAddress.selector);
         c.proposeOracleConfig(cfg);

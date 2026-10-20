@@ -212,7 +212,9 @@ export function useLiveMarkets(): Source {
         write({
           ...base,
           functionName: "createMarket",
-          args: [input.condition, input.outcome, input.rules, BigInt(input.closeTime), BigInt(input.resolveTime)],
+          // The last argument caps what the contract may pull: a configuration activated meanwhile that charges
+          // more makes the call revert instead of taking a larger deposit.
+          args: [input.condition, input.outcome, input.rules, BigInt(input.closeTime), BigInt(input.resolveTime), deposit],
         }),
       );
       for (const log of receipt?.logs ?? []) {

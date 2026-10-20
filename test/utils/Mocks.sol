@@ -3,6 +3,8 @@ pragma solidity 0.8.26;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IIntake} from "../../src/interfaces/IIntake.sol";
 import {IOracleAttestation} from "../../src/interfaces/IOracleAttestation.sol";
 
@@ -12,6 +14,21 @@ contract MockIMD is ERC20 {
 
     function mint(address to, uint256 amount) external {
         _mint(to, amount);
+    }
+}
+
+/// @dev A signer registry like the protocol's: answers ERC-1271 for the keys it lists.
+contract MockSignerRegistry is IERC1271 {
+    mapping(address => bool) public listed;
+
+    function set(address key, bool ok) external {
+        listed[key] = ok;
+    }
+
+    function isValidSignature(bytes32 hash, bytes memory signature) external view returns (bytes4) {
+        (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(hash, signature);
+        if (err == ECDSA.RecoverError.NoError && listed[recovered]) return IERC1271.isValidSignature.selector;
+        return bytes4(0);
     }
 }
 

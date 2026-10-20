@@ -24,7 +24,7 @@ function payout(m: MarketView): number {
 
 function settle(m: MarketView): { market: MarketView; burned: number; fee: number } {
   const world: World = m.answers[0] === 1 ? 0 : 1;
-  const side: Side = world === 0 && m.answers[1] === 1 ? 0 : 1;
+  const side: Side = m.answers[1] === 1 ? 0 : 1;
   const [yes, no] = m.pools[world];
   const next: MarketView = { ...m, status: "settled", world, winningSide: side, budget: 0 };
   if (yes === 0 || no === 0) return { market: { ...next, worldRefunded: true }, burned: 0, fee: 0 };

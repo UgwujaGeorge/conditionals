@@ -354,9 +354,9 @@ function Resolution({ m, now }: { m: MarketView; now: number }) {
     {
       label: "Answered",
       sub:
-        m.answers[0] === 0
+        m.answers[0] === 0 && m.answers[1] === 0
           ? "waiting for the panel"
-          : `condition ${answer(m.answers[0])}${m.answers[0] === 1 ? ` · outcome ${answer(m.answers[1]) ?? "pending"}` : ""}`,
+          : `condition ${answer(m.answers[0])} · outcome ${answer(m.answers[1]) ?? "pending"}`,
       done: settleable(m) || m.status !== "open",
       active: s === "resolving" && asked,
     },

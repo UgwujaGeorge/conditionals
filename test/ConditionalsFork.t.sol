@@ -31,7 +31,8 @@ contract ConditionalsForkTest is Test {
             "ETH closes above 5000 USD on Coinbase on 2026-12-01",
             "Use congress.gov for the law and the Coinbase ETH-USD daily close for the price.",
             uint64(block.timestamp + 1 hours),
-            uint64(block.timestamp + 2 hours)
+            uint64(block.timestamp + 2 hours),
+            1 ether
         );
         vm.stopPrank();
 

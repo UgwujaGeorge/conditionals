@@ -457,6 +457,102 @@ export const conditionalsAbi = [
   },
   {
     "type": "function",
+    "name": "attestationDigest",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "tuple",
+        "internalType": "struct IOracleAttestation.Attestation",
+        "components": [
+          {
+            "name": "requestId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "chainId",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "questionHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "answerType",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "answer",
+            "type": "bytes",
+            "internalType": "bytes"
+          },
+          {
+            "name": "figure",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "fromBlock",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "toBlock",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "blockHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "panelJobId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "panelSize",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "quorum",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "agreed",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "issuedAt",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "expiresAt",
+            "type": "uint64",
+            "internalType": "uint64"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "claim",
     "inputs": [
       {
@@ -550,6 +646,11 @@ export const conditionalsAbi = [
         "name": "resolveTime",
         "type": "uint64",
         "internalType": "uint64"
+      },
+      {
+        "name": "maxBudget",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -717,6 +818,11 @@ export const conditionalsAbi = [
                 "name": "quorum",
                 "type": "uint16",
                 "internalType": "uint16"
+              },
+              {
+                "name": "action",
+                "type": "bytes32",
+                "internalType": "bytes32"
               }
             ]
           },
@@ -948,6 +1054,11 @@ export const conditionalsAbi = [
         "name": "quorum",
         "type": "uint16",
         "internalType": "uint16"
+      },
+      {
+        "name": "action",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "stateMutability": "view"
@@ -994,6 +1105,11 @@ export const conditionalsAbi = [
         "name": "quorum",
         "type": "uint16",
         "internalType": "uint16"
+      },
+      {
+        "name": "action",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "stateMutability": "view"
@@ -1057,6 +1173,11 @@ export const conditionalsAbi = [
             "name": "quorum",
             "type": "uint16",
             "internalType": "uint16"
+          },
+          {
+            "name": "action",
+            "type": "bytes32",
+            "internalType": "bytes32"
           }
         ]
       }
@@ -1311,6 +1432,25 @@ export const conditionalsAbi = [
     "stateMutability": "nonpayable"
   },
   {
+    "type": "function",
+    "name": "voidable",
+    "inputs": [
+      {
+        "name": "marketId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
     "type": "event",
     "name": "AnswerIgnored",
     "inputs": [
@@ -1555,6 +1695,11 @@ export const conditionalsAbi = [
             "name": "quorum",
             "type": "uint16",
             "internalType": "uint16"
+          },
+          {
+            "name": "action",
+            "type": "bytes32",
+            "internalType": "bytes32"
           }
         ]
       }
@@ -1595,6 +1740,11 @@ export const conditionalsAbi = [
             "name": "quorum",
             "type": "uint16",
             "internalType": "uint16"
+          },
+          {
+            "name": "action",
+            "type": "bytes32",
+            "internalType": "bytes32"
           }
         ]
       },
@@ -1789,6 +1939,22 @@ export const conditionalsAbi = [
     "type": "error",
     "name": "BettingClosed",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BudgetTooHigh",
+    "inputs": [
+      {
+        "name": "budget",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxBudget",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",

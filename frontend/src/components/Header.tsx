@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useMarkets } from "./Providers";
@@ -40,8 +41,14 @@ export function Header({ onCreate }: { onCreate: () => void }) {
           <a href="#imd" className="transition hover:text-ink">
             IMD
           </a>
+          <Link href="/docs" className="transition hover:text-ink">
+            Docs
+          </Link>
         </nav>
         <div className="ml-auto flex items-center gap-2.5">
+          <Link href="/docs" className="text-sm text-ink-2 transition hover:text-ink md:hidden">
+            Docs
+          </Link>
           <button onClick={onCreate} className="btn btn-ghost hidden !py-2 text-sm sm:inline-flex">
             Create market
           </button>

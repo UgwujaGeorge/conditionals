@@ -244,6 +244,57 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.doc {
+  display: grid;
+  gap: 1rem;
+  color: var(--color-ink-2);
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+.doc .lead {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  line-height: 1.2;
+  color: var(--color-ink);
+}
+.doc strong {
+  color: var(--color-ink);
+  font-weight: 500;
+}
+.doc ul,
+.doc ol {
+  display: grid;
+  gap: 0.6rem;
+  padding-left: 1.25rem;
+}
+.doc ul {
+  list-style: disc;
+}
+.doc ol {
+  list-style: decimal;
+}
+.doc li::marker {
+  color: var(--color-dim);
+}
+.doc table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+.doc th,
+.doc td {
+  border-bottom: 1px solid var(--color-line);
+  padding: 0.6rem 0.5rem;
+  text-align: left;
+}
+.doc th {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  color: var(--color-mute);
+  font-weight: 400;
+}
+
 .scrollbar-none {
   scrollbar-width: none;
 }

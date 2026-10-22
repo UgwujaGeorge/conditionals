@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { FlameIcon, Logo, OracleIcon } from "./Glyphs";
 import { useMarkets } from "./Providers";
 import { ADDRESSES, LINKS, LIVE, RULES } from "@/lib/config";
@@ -192,6 +194,9 @@ export function Footer() {
               Contract {short(ADDRESSES.conditionals)}
             </a>
           )}
+          <Link href="/docs" className="hover:text-ink">
+            Docs
+          </Link>
           <a href={LINKS.github} target="_blank" rel="noreferrer" className="hover:text-ink">
             GitHub
           </a>

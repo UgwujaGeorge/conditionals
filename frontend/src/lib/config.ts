@@ -13,8 +13,8 @@ export const chain = robinhood;
 const env = (v: string | undefined) => (v && v.startsWith("0x") && v.length === 42 ? (v as Address) : undefined);
 
 /** Set once the IMD launch is live. Without them, or with NEXT_PUBLIC_DEMO=1, the site runs on sample markets. */
-const DEPLOYED: Address | undefined = undefined;
-const DEPLOYED_ZAP: Address | undefined = undefined;
+const DEPLOYED: Address | undefined = "0xd8e4baf371abc9a36611543386f68e0df122fcf0";
+const DEPLOYED_ZAP: Address | undefined = "0x750a28557a6263681f0cb9612cc86cc6f3a7476d";
 
 const demo = process.env.NEXT_PUBLIC_DEMO === "1";
 

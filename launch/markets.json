@@ -1,0 +1,18 @@
+[
+ {"condition":"The Federal Reserve raises the federal funds target range at its FOMC decision announced on 2026-12-09",
+  "outcome":"BTC closes above 75000 USD on Coinbase on 2026-12-31",
+  "rules":"Condition: use the FOMC statement on federalreserve.gov dated 2026-12-09; true only if the target range rises at that decision. Outcome: use the Coinbase BTC-USD daily candle for 2026-12-31 UTC, which closes at 00:00 UTC on 2027-01-01; true only if the close is strictly above 75000 USD.",
+  "close":"2026-12-09T00:00:00Z","resolve":"2027-01-01T12:00:00Z"},
+ {"condition":"The United States carries out new military strikes on Iranian territory between 2026-11-01 and 2026-12-31 UTC",
+  "outcome":"The ICE Brent front-month futures contract settles above 115 USD per barrel on 2026-12-31",
+  "rules":"Condition: true only if the US government or at least two of Reuters, AP and Bloomberg confirm a US strike on Iranian territory that took place inside those dates; earlier strikes do not count. Outcome: use the ICE Futures Europe settlement for the Brent contract that is front-month on 2026-12-31, or the last settlement on or before that date if none is published that day; true only if strictly above 115 USD.",
+  "close":"2026-12-31T00:00:00Z","resolve":"2027-01-01T12:00:00Z"},
+ {"condition":"The US Senate holds a recorded floor vote on the Digital Asset Market Clarity Act (H.R. 3633) between 2026-11-01 and 2026-12-31 UTC",
+  "outcome":"ETH closes above 2500 USD on Coinbase on 2026-12-31",
+  "rules":"Condition: use senate.gov roll call votes or congress.gov actions for H.R. 3633; a recorded roll call on cloture, an amendment or passage inside those dates counts, and a voice vote or committee vote does not. Outcome: use the Coinbase ETH-USD daily candle for 2026-12-31 UTC, which closes at 00:00 UTC on 2027-01-01; true only if the close is strictly above 2500 USD.",
+  "close":"2026-12-31T00:00:00Z","resolve":"2027-01-01T12:00:00Z"},
+ {"condition":"BTC closes above 75000 USD on Coinbase on 2026-12-31",
+  "outcome":"IMD trades above 5 USD on Robinhood Chain at the end of 2026-12-31 UTC",
+  "rules":"Condition: use the Coinbase BTC-USD daily candle for 2026-12-31 UTC, which closes at 00:00 UTC on 2027-01-01; true only if the close is strictly above 75000 USD. Outcome: use the DexScreener USD price of the IMD/ETH Uniswap v4 pool on Robinhood Chain, token 0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127, at 00:00 UTC on 2027-01-01; true only if strictly above 5 USD.",
+  "close":"2026-12-31T00:00:00Z","resolve":"2027-01-01T12:00:00Z"}
+]

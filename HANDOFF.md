@@ -5,6 +5,17 @@ haileymarshall). Push with `gh auth token --user UgwujaGeorge`; do not switch th
 
 ## LATEST HANDOFF SESSION: 2026-10-31 (read this first)
 
+### UPDATE 2026-10-31, 19:50 WAT: v2 IS LIVE WITH 4 MARKETS (launch 2786). This block overrides everything below.
+
+- ConditionalsV2 `0xd8e4baf371abc9a36611543386f68e0df122fcf0`, ConditionalsZap `0x750a28557a6263681f0cb9612cc86cc6f3a7476d`. Site at conditionals.xyz runs on them from `main`.
+- Job `3ecec030-b2ed-4059-8ebf-38a09626e73c`, launch `4edfea53-c4be-494b-a84d-e7b5776d6861`, no findings on the first judge pass. Delivered commit `1976c73`, no `src` change. Manifest at `launch/2786-manifest.json`.
+- Markets 1 to 4 created from `launch/markets.json`, text read back from the chain and exact. The user set BTC to 75000 in markets 1 and 4. `b` 1.44 IMD, seed 1.996 IMD each. Market 1 closes Dec 9 00:00 UTC, the others Dec 31 00:00 UTC, all resolve from Jan 1 2027 12:00 UTC.
+- Real bets from the wallet: ETH through the zap on market 1, USDG through the zap on market 2, one `sell`, one `exit` on each. Positions went to zero and prices back to 25%. The zap kept nothing.
+- Wallet after the tests: 3.19 IMD, 0.00108 ETH. It is owed 0.0035 IMD in fees, claimable from the contract.
+- Tests: 154 pass offline. The fork suite needs a recent `FORK_BLOCK` on the public RPC: 12 of 13 pass, `test_fork_launchArgumentsAndDependencies` fails only in that setup.
+- IMD's pre-check returns `not_answerable` for any future-dated question. Past-dated versions of most of the wording had no blockers; the 75000 condition in market 4 was not tested on its own.
+- Still open: which film to post, and recapturing it with the real markets (videos are no longer blocked by the bets).
+
 **The user's decision: relaunch v2 through IMD with another 0.5 IMD when they get back.** Nothing is running and nothing has
 been paid since the park. Start with step 1 below as soon as they say to continue. `PROGRESS.md` has the plain-language
 history, and everything further down this file is older history: where it conflicts, this section wins.

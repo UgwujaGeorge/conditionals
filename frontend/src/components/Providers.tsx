@@ -5,9 +5,12 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { WagmiProvider, createConfig, http } from "wagmi";
 import { injected } from "wagmi/connectors";
 
-import { chain, LIVE } from "@/lib/config";
+import { chain, FACTS_LIVE, LIVE } from "@/lib/config";
 import { useDemoMarkets } from "@/hooks/useDemoMarkets";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
+import { useDemoFacts } from "@/hooks/useDemoFacts";
+import { useLiveFacts } from "@/hooks/useLiveFacts";
+import type { FactsSource } from "@/lib/facts";
 import type { Source } from "@/lib/types";
 
 const wagmiConfig = createConfig({
@@ -19,12 +22,19 @@ const wagmiConfig = createConfig({
 
 // LIVE is fixed at build time, so the same hook runs on every render.
 const useSource = LIVE ? useLiveMarkets : useDemoMarkets;
+const useFactsSource = FACTS_LIVE ? useLiveFacts : useDemoFacts;
 
 const SourceContext = createContext<Source | null>(null);
+const FactsContext = createContext<FactsSource | null>(null);
 
 function Bridge({ children }: { children: ReactNode }) {
   const source = useSource();
-  return <SourceContext.Provider value={source}>{children}</SourceContext.Provider>;
+  const facts = useFactsSource();
+  return (
+    <SourceContext.Provider value={source}>
+      <FactsContext.Provider value={facts}>{children}</FactsContext.Provider>
+    </SourceContext.Provider>
+  );
 }
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -41,5 +51,11 @@ export function Providers({ children }: { children: ReactNode }) {
 export function useMarkets() {
   const ctx = useContext(SourceContext);
   if (!ctx) throw new Error("useMarkets outside Providers");
+  return ctx;
+}
+
+export function useFacts() {
+  const ctx = useContext(FactsContext);
+  if (!ctx) throw new Error("useFacts outside Providers");
   return ctx;
 }

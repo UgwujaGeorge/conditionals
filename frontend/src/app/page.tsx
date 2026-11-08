@@ -10,6 +10,7 @@ import { MarketDrawer } from "@/components/MarketDrawer";
 import { Markets } from "@/components/Markets";
 import { Footer, HowItWorks, ImdSection, Toast } from "@/components/Sections";
 import { Stats } from "@/components/Stats";
+import { EncyclopediaTeaser, Suggestions } from "@/components/Suggestions";
 import { useNow } from "@/hooks/useNow";
 
 /** A market opens in the drawer from its hash, #m-<id>, so links to a market can be shared. */
@@ -50,6 +51,8 @@ export default function Home() {
         </div>
         <Featured now={now} />
         <Markets now={now} onCreate={create} />
+        <EncyclopediaTeaser />
+        <Suggestions />
         <HowItWorks />
         <ImdSection />
       </main>

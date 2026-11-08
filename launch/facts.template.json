@@ -1,0 +1,27 @@
+{
+  "objective": "Launch one contract in this repository on Robinhood Chain without changing its logic: src/ConditionalsFacts.sol:ConditionalsFacts, constructor (address owner = $owner, IERC20 imd = 0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127, IIntake intake = 0xa43e6f75ee006411f79ac1c84120606c2330de82, address oracleSigner = 0x5598aa9146215bc13eb26f2c692ad1461fd32982, address feeRecipient = FEE_RECIPIENT). The constructor makes no external calls. ConditionalsFacts runs perpetual truth markets in IMD for an encyclopedia, judged by the IdentityMD oracle. A fact is a claim with judging rules, filed under a topic. It trades in rounds; each round is a two-outcome LMSR market (TRUE 0, FALSE 1) funded by its seeder with b ln 2 (b from 0.1 to 100 IMD, Solady expWad and lnWad, log-sum-exp, rounding margins that keep makerBalance >= C(q) >= every q[i]); the seed is the seeder's maximum loss. The LMSR math is the same code as ConditionalsV2 (this repository, deployed from IMD launch 2786 after audit), reduced from four outcomes to two; traders only buy from and sell to the maker, so q[i] is exactly the shares traders hold and never negative, and there are no complete sets. A round has no close time. buy spends an exact amount including the 2% fee (buyFor pays for another account); sell sells shares back, and an amount below the 0.001 minimum is accepted only as a whole holding. Every maker trade pays 2%: half accrues to the round's seeder in owed, 67/200 is sent to 0x000000000000000000000000000000000000dEaD because IMD reverts on transfers to zero, the rest accrues to feeRecipient in owed. challenge(factId, maxPrice) is the only way a round settles: the caller pays the Intake's live oracle price (capped by maxPrice and MAX_PRICE 10 IMD), the contract asks oracle.request@oracle-1 with requestWithFailure (panel 5, quorum 4, bool, panel evidence, window pinned to one Ethereum block, block.number - 10, since block.number on Robinhood Chain is the Ethereum block number) whether the claim was true as of the challenge's block.timestamp, stores keccak256 of the canonical question document, and trading pauses. onOracleResult (selector 0x510379c7) settles the round only for the round's live ask, from the Intake it was sent to, within ASK_TIMEOUT (1 day) of the ask, with the stored questionHash, answerType bool, panelSize and quorum at least the round's configuration, agreed >= quorum, not expired, and an EIP-712 signature (domain IdentityMD Oracle, version 2) from the configuration's signer; the seeder's residual is credited to owed, not pushed, to stay under the Intake's 200,000 callback gas. Any other answer (stale ask, after the timeout, after a re-challenge) is ignored. onFailure (0x5a0df71e) resumes trading only for the round's live ask. After ASK_TIMEOUT with no answer trading resumes and the round can be challenged again; this is deliberate so a lost answer never freezes funds. Winners redeem 1 IMD per share; anyone can then open the next round with a fresh seed. A seeder can close their round and take the maker balance back only while no shares are outstanding (a dust holder can block that; the seeder can always end the round by challenging it, which is deliberate). The owner can only add oracle configurations behind a 3 day delay (activatable for 7 days) that apply to rounds opened afterwards, and set the fee recipient; it cannot touch trades, answers or open rounds. No token, no proxy, no pause. The question format passed the oracle's free /requests/check with no blockers. Runtime is about 20.5 KB with optimizer_runs 1. Only ConditionalsFacts is to be deployed; ConditionalsV2 and ConditionalsZap are already live and must not be changed or redeployed. The test suite (test/ConditionalsFacts.t.sol: unit, fuzz conservation, a question document fuzzed against the protocol's OracleQuestion reference, signature and binding checks, callback gas, timeouts and stale answers, config rotation, plus the existing suites) must keep passing.",
+  "shape": "chain",
+  "references": [
+    "evm-contracts-launch",
+    "oracle-consumer",
+    "intake-client",
+    "solidity-security-review",
+    "eth-security"
+  ],
+  "steps": [
+    {
+      "skill": "audit-imported-code"
+    },
+    {
+      "skill": "adapt-contract-project"
+    },
+    {
+      "skill": "adversarial-review"
+    }
+  ],
+  "onchain": "evm_contracts",
+  "chainId": 4663,
+  "owner": "OWNER",
+  "repoUrl": "https://github.com/UgwujaGeorge/conditionals.git",
+  "baseCommit": "COMMIT"
+}

@@ -125,6 +125,12 @@ export function Footer() {
           </p>
         </div>
         <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm text-ink-2">
+          <Link href="/wiki" className="hover:text-ink">
+            Encyclopedia
+          </Link>
+          <Link href="/#suggest" className="hover:text-ink">
+            Suggest a market
+          </Link>
           <Link href="/docs" className="hover:text-ink">
             Docs
           </Link>

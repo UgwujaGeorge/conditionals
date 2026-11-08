@@ -15,12 +15,15 @@ const env = (v: string | undefined) => (v && v.startsWith("0x") && v.length === 
 /** Set once the IMD launch is live. Without them, or with NEXT_PUBLIC_DEMO=1, the site runs on sample markets. */
 const DEPLOYED: Address | undefined = "0xd8e4baf371abc9a36611543386f68e0df122fcf0";
 const DEPLOYED_ZAP: Address | undefined = "0x750a28557a6263681f0cb9612cc86cc6f3a7476d";
+/** The encyclopedia's fact markets. Set once its IMD launch is live; until then /wiki runs on sample facts. */
+const DEPLOYED_FACTS: Address | undefined = undefined;
 
 const demo = process.env.NEXT_PUBLIC_DEMO === "1";
 
 export const ADDRESSES = {
   conditionals: demo ? undefined : (env(process.env.NEXT_PUBLIC_CONDITIONALS_ADDRESS) ?? DEPLOYED),
   zap: demo ? undefined : (env(process.env.NEXT_PUBLIC_ZAP_ADDRESS) ?? DEPLOYED_ZAP),
+  facts: demo ? undefined : (env(process.env.NEXT_PUBLIC_FACTS_ADDRESS) ?? DEPLOYED_FACTS),
   usdg: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168" as Address,
   poolManager: "0x8366a39CC670B4001A1121B8F6A443A643e40951" as Address,
   imd: env(process.env.NEXT_PUBLIC_IMD_ADDRESS) ?? ("0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127" as Address),
@@ -29,6 +32,7 @@ export const ADDRESSES = {
 };
 
 export const LIVE = Boolean(ADDRESSES.conditionals);
+export const FACTS_LIVE = Boolean(ADDRESSES.facts);
 
 export const LINKS = {
   imd: "https://imd.fun",
@@ -56,4 +60,18 @@ export const RULES = {
   maxRules: 500,
   /** The slippage a stake or an exit accepts. */
   slippage: 0.02,
+};
+
+/** Mirrors ConditionalsFacts. */
+export const FACT_RULES = {
+  feeBps: 200,
+  minTrade: 0.001,
+  minB: 0.1,
+  maxB: 100,
+  oraclePrice: 0.5,
+  /** Seconds a challenge waits for its answer before trading resumes. */
+  askTimeout: 86_400,
+  maxTopic: 64,
+  maxClaim: 280,
+  maxRules: 500,
 };

@@ -278,9 +278,9 @@ contract ConditionalsFactsFailurePathsTest is FactsFixture {
         assertTrue(_answer(id, second, true));
         vm.prank(alice);
         assertEq(c.redeem(id, 2), k);
+        // Round one closed with nothing held: it redeems nothing.
         vm.prank(alice);
-        vm.expectRevert(Facts.NotSettled.selector);
-        c.redeem(id, 1);
+        assertEq(c.redeem(id, 1), 0);
         _drainAll();
     }
 
@@ -359,12 +359,17 @@ contract ConditionalsFactsFailurePathsTest is FactsFixture {
         intake.setPrice(10 ether);
         assertEq(c.challengePrice(id), 10 ether, "MAX_PRICE itself is allowed");
         intake.setPrice(10 ether + 1);
-        assertEq(c.challengePrice(id), 0.5 ether, "above MAX_PRICE: the configured price");
-        // The Intake then refuses the configured price below its own; nothing is charged.
+        assertEq(c.challengePrice(id), 10 ether + 1, "above MAX_PRICE: the live price is quoted");
+        // challenge refuses a live price above MAX_PRICE, whatever maxPrice allows; nothing is charged.
         uint256 before = imd.balanceOf(carol);
         vm.prank(carol);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Facts.PriceTooHigh.selector, 10 ether + 1, 10 ether));
         c.challenge(id, 100 ether);
+        // maxPrice below MAX_PRICE is the cap.
+        intake.setPrice(2 ether);
+        vm.prank(carol);
+        vm.expectRevert(abi.encodeWithSelector(Facts.PriceTooHigh.selector, 2 ether, 1 ether));
+        c.challenge(id, 1 ether);
         assertEq(imd.balanceOf(carol), before);
         assertTrue(c.trading(id));
 
@@ -586,14 +591,16 @@ contract ConditionalsFactsFailurePathsTest is FactsFixture {
         c.closeRound(id);
         assertFalse(c.trading(id));
 
-        // A closed round redeems nothing.
+        // A closed round in which the caller holds nothing redeems nothing; an open one cannot be redeemed.
         vm.prank(bob);
         c.openRound(id);
-        vm.prank(bob);
-        c.closeRound(id);
         vm.prank(alice);
         vm.expectRevert(Facts.NotSettled.selector);
         c.redeem(id, 2);
+        vm.prank(bob);
+        c.closeRound(id);
+        vm.prank(alice);
+        assertEq(c.redeem(id, 2), 0);
 
         vm.prank(carol);
         vm.expectRevert(Facts.NothingToClaim.selector);
@@ -769,6 +776,71 @@ contract ConditionalsFactsFailurePathsTest is FactsFixture {
     // ---- helpers ---------------------------------------------------------------------------------------------------
 
     /// @dev Withdraws everything owed and checks that only dust beyond the unredeemed winners is left.
+    // ---- closeRound with shares outstanding (implementation since d262ee8; see .imd-findings.json) ---------------
+
+    /// @dev One-sided trading: the maker holds more than the shares held, the seeder takes the surplus back and every
+    ///      holder redeems 1 IMD per share, whatever side.
+    function test_closeWithSharesHeldPaysEveryHolderInFull() public {
+        uint256 id = _create();
+        uint256 k = _buy(alice, id, 0, 3 ether);
+        Facts.Round memory pre = c.getRound(id, 1);
+        assertGt(pre.makerBalance, k);
+        uint256 before = imd.balanceOf(creator);
+        vm.prank(creator);
+        uint256 refund = c.closeRound(id);
+        assertEq(refund, pre.makerBalance - k);
+        assertEq(imd.balanceOf(creator) - before, refund);
+        assertEq(c.getRound(id, 1).makerBalance, k);
+        assertEq(c.redeemable(id, 1, alice), k);
+        vm.prank(alice);
+        assertEq(c.redeem(id, 1), k);
+        vm.prank(alice);
+        assertEq(c.redeem(id, 1), 0, "a second redemption pays nothing");
+        // A closed round takes no trade, no challenge and no second close.
+        vm.prank(bob);
+        vm.expectRevert(Facts.NotTrading.selector);
+        c.buy(id, 1, 1 ether, 0);
+        vm.prank(carol);
+        vm.expectRevert(Facts.NotTrading.selector);
+        c.challenge(id, 10 ether);
+        vm.prank(creator);
+        vm.expectRevert(Facts.NotTrading.selector);
+        c.closeRound(id);
+        _drainAll();
+    }
+
+    /// @dev Both sides bought: shares held exceed the maker, so the seeder pays in the shortfall (losing more than the
+    ///      seed) and both sides redeem 1 IMD per share. A seeder without the shortfall cannot close.
+    function test_closeWithBothSidesHeldMakesTheSeederPayTheShortfall() public {
+        uint256 id = _create();
+        uint256 k0 = _buy(alice, id, 0, 40 ether);
+        uint256 k1 = _buy(bob, id, 1, 40 ether);
+        Facts.Round memory pre = c.getRound(id, 1);
+        assertGt(k0 + k1, pre.makerBalance, "both sides held exceed the maker");
+        uint256 shortfall = k0 + k1 - pre.makerBalance;
+
+        // A seeder who cannot pay the shortfall cannot close; nothing changes.
+        vm.prank(creator);
+        imd.approve(address(c), shortfall - 1);
+        vm.prank(creator);
+        vm.expectRevert();
+        c.closeRound(id);
+        assertTrue(c.trading(id));
+
+        vm.prank(creator);
+        imd.approve(address(c), type(uint256).max);
+        uint256 before = imd.balanceOf(creator);
+        vm.prank(creator);
+        assertEq(c.closeRound(id), 0);
+        assertEq(before - imd.balanceOf(creator), shortfall);
+        assertGt(shortfall, pre.seed, "the seeder loses more than the seed");
+        vm.prank(alice);
+        assertEq(c.redeem(id, 1), k0);
+        vm.prank(bob);
+        assertEq(c.redeem(id, 1), k1);
+        _drainAll();
+    }
+
     function _drainAll() internal {
         address[5] memory who = [creator, alice, bob, carol, builder];
         for (uint256 i; i < who.length; ++i) {

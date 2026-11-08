@@ -91,5 +91,22 @@ and local logs were directed to `test/scratch/`, which is excluded from submissi
   - Lifecycle refusals.
   - Fuzzed edges: buy spend, exact fee split, round trips never profit, settlement always covers the winners.
   - ERC-1271 callback gas.
-- Reported, not asserted (`.imd-findings.json`): whole-holding sales of the cheap side revert `PriceLimit` once the
-  other side holds more than 20b shares beyond them.
+- Earlier report (cheap-side sales refused `PriceLimit` past 20b): fixed in the implementation, since sales are no
+  longer held to MAX_SPREAD_B. The invariant now checks that every successful purchase leaves the spread within
+  20b. Where a sale has widened the spread past the reference series' domain, it checks that the maker covers the
+  top side.
+
+## Revision (after implementation commit d262ee8)
+
+- `testFuzz_conservation`: carol both trades and pays the challenge, so she is now minted the price before `_judge`.
+  Previously a seed that drained her failed with `ERC20InsufficientBalance`.
+- Updated to the implementation's new rules:
+  - A live price above MAX_PRICE: `challenge` reverts `PriceTooHigh(price, min(maxPrice, MAX_PRICE))`.
+  - A closed round redeems every share held, of either side.
+  - `closeRound` works while shares are held: the seeder takes the surplus back or pays in the shortfall.
+- Invariants follow the same rules: a closed round's maker equals the shares still held, the close handler checks
+  the refund and the shortfall, and the final drain redeems closed rounds.
+- New unit tests: close with shares held (surplus and shortfall), and a seeder who cannot pay the shortfall cannot
+  close.
+- Reported, not asserted (`.imd-findings.json`): closing with shares outstanding departs from the brief, which allows
+  a close only while no shares are outstanding and makes the seed the seeder's maximum loss.

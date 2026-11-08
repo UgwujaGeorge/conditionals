@@ -201,6 +201,10 @@ contract FactsHandler is Test {
         try c.buy(id, side, amount, 0) returns (uint256 k) {
             if (before - imd.balanceOf(a) > amount) _violation("buy spent more than amount");
             if (c.sharesOf(id, round, a)[side] != held + k) _violation("buy did not credit shares");
+            // Purchases, unlike sales, are held to MAX_SPREAD_B.
+            int256[2] memory q = c.getRound(id, round).q;
+            int256 gap = q[0] > q[1] ? q[0] - q[1] : q[1] - q[0];
+            if (gap > 20 * int256(b)) _violation("a purchase left the spread beyond MAX_SPREAD_B");
         } catch (bytes memory err) {
             if (
                 !_is(err, Facts.PriceLimit.selector) && !_is(err, Facts.TradeTooSmall.selector)
@@ -246,8 +250,8 @@ contract FactsHandler is Test {
             if (imd.balanceOf(a) - before != proceeds) _violation("sell paid other than its proceeds");
             if (proceeds > shares) _violation("sell paid more than 1 IMD per share");
         } catch (bytes memory err) {
-            // A partial sale below the minimum, or one worth less than the rounding, is refused; so is a sale that
-            // would widen the spread past MAX_SPREAD_B (selling the cheap side of a saturated round).
+            // A partial sale below the minimum, or one worth less than the rounding, is refused. Sales are not held
+            // to MAX_SPREAD_B (a sale only lowers C(q)); PriceLimit stays tolerated in case the implementation does.
             bool partialTooSmall = shares != held && _is(err, Facts.TradeTooSmall.selector);
             if (!partialTooSmall && !_is(err, Facts.PriceLimit.selector)) _unexpected("sell", err);
         }
@@ -346,12 +350,26 @@ contract FactsHandler is Test {
         ++calls;
         (uint256 id, uint32 round,) = _fact(factSel);
         Facts.Round memory r = c.getRound(id, round);
-        if (!c.trading(id) || r.q[0] != 0 || r.q[1] != 0) return;
+        if (!c.trading(id)) return;
+        // Every share still held, of either side, stays in the maker at 1 IMD; the seeder takes the rest back or
+        // pays in what the maker lacks.
+        uint256 held = uint256(r.q[0]) + uint256(r.q[1]);
         uint256 before = imd.balanceOf(r.seeder);
+        uint256 custody = imd.balanceOf(address(c));
         vm.prank(r.seeder);
         try c.closeRound(id) returns (uint256 refund) {
-            if (refund != r.makerBalance || imd.balanceOf(r.seeder) - before != refund) _violation("close refund");
-            if (refund < r.seed) _violation("an empty round returned less than its seed");
+            uint256 expected = r.makerBalance > held ? r.makerBalance - held : 0;
+            if (refund != expected) _violation("close refund");
+            if (held > r.makerBalance) {
+                if (before - imd.balanceOf(r.seeder) != held - r.makerBalance) _violation("close shortfall");
+            } else if (imd.balanceOf(r.seeder) - before != refund) {
+                _violation("close paid other than its refund");
+            }
+            if (held == 0 && refund < r.seed) _violation("an empty round returned less than its seed");
+            if (c.getRound(id, round).makerBalance != held) _violation("closed maker != shares held");
+            if (imd.balanceOf(address(c)) + refund != custody + (held > r.makerBalance ? held - r.makerBalance : 0)) {
+                _violation("close moved other than the refund or shortfall");
+            }
         } catch (bytes memory err) {
             _unexpected("closeRound", err);
         }
@@ -376,9 +394,11 @@ contract FactsHandler is Test {
         (uint256 id, uint32 rounds,) = _fact(factSel);
         uint32 round = uint32(bound(roundSel, 1, rounds));
         Facts.Round memory r = c.getRound(id, round);
-        if (r.phase != Facts.Phase.Settled) return;
+        if (r.phase != Facts.Phase.Settled && r.phase != Facts.Phase.Closed) return;
         address a = actors[who % actors.length];
-        uint256 expected = c.sharesOf(id, round, a)[r.winner];
+        uint256[2] memory s = c.sharesOf(id, round, a);
+        // A settled round pays the winning side; a closed one pays every share of either side.
+        uint256 expected = r.phase == Facts.Phase.Settled ? s[r.winner] : s[0] + s[1];
         uint256 before = imd.balanceOf(a);
         vm.prank(a);
         try c.redeem(id, round) returns (uint256 amount) {
@@ -430,7 +450,9 @@ contract FactsHandler is Test {
                 require(c.getRound(id, round).phase == Facts.Phase.Settled, "final settle");
             }
             for (uint32 r = 1; r <= round; ++r) {
-                if (c.getRound(id, r).phase != Facts.Phase.Settled) continue;
+                // Settled rounds pay their winners; closed rounds every share still held.
+                Facts.Phase phase = c.getRound(id, r).phase;
+                if (phase != Facts.Phase.Settled && phase != Facts.Phase.Closed) continue;
                 for (uint256 j; j < actors.length; ++j) {
                     vm.prank(actors[j]);
                     c.redeem(id, r);
@@ -515,7 +537,8 @@ contract ConditionalsFactsInvariantTest is Test {
     }
 
     /// @dev Shares outstanding are exactly what the maker sold; a settled round's maker holds exactly the unredeemed
-    ///      winning shares; a live round's maker covers the true C(q), which covers every side; the spread is bounded.
+    ///      winning shares, a closed round's exactly every share still held; a live round's maker covers the true C(q), which
+    ///      covers every side (past MAX_SPREAD_B, reachable only by sales, it covers the top side).
     /// forge-config: default.invariant.runs = 256
     function invariant_roundsAreSolventAndShareExact() public view {
         for (uint256 i; i < h.factCount(); ++i) {
@@ -539,21 +562,28 @@ contract ConditionalsFactsInvariantTest is Test {
                 if (rd.phase == Facts.Phase.Settled) {
                     assertEq(rd.makerBalance, held[rd.winner], "settled maker != unredeemed winners");
                     assertEq(rd.askKey, bytes32(0));
+                } else if (rd.phase == Facts.Phase.Closed) {
+                    // A closed round's maker holds exactly 1 IMD for every share still held, of either side.
+                    assertEq(rd.makerBalance, held[0] + held[1], "closed maker != unredeemed shares");
+                    assertEq(rd.askKey, bytes32(0));
+                    assertLe(held[0], uint256(rd.q[0]));
+                    assertLe(held[1], uint256(rd.q[1]));
                 } else {
                     assertEq(uint256(rd.q[0]), held[0], "q[0] != shares held");
                     assertEq(uint256(rd.q[1]), held[1], "q[1] != shares held");
                 }
-                if (rd.phase == Facts.Phase.Closed) {
-                    assertEq(rd.makerBalance, 0);
-                    assertEq(rd.q[0], 0);
-                    assertEq(rd.q[1], 0);
-                }
                 if (rd.phase == Facts.Phase.Open || rd.phase == Facts.Phase.Asking) {
+                    int256 top = rd.q[0] > rd.q[1] ? rd.q[0] : rd.q[1];
                     int256 gap = rd.q[0] > rd.q[1] ? rd.q[0] - rd.q[1] : rd.q[1] - rd.q[0];
-                    assertLe(gap, 20 * int256(f.b), "spread beyond MAX_SPREAD_B");
-                    int256 cq = Lmsr2Reference.cost(rd.q, f.b);
-                    assertGe(int256(rd.makerBalance), cq, "maker below C(q)");
-                    assertGe(cq, rd.q[0] > rd.q[1] ? rd.q[0] : rd.q[1], "C(q) below a side");
+                    if (gap <= 20 * int256(f.b)) {
+                        int256 cq = Lmsr2Reference.cost(rd.q, f.b);
+                        assertGe(int256(rd.makerBalance), cq, "maker below C(q)");
+                        assertGe(cq, top, "C(q) below a side");
+                    } else {
+                        // Only sales widen the spread past MAX_SPREAD_B. There C(q) - top = b ln(1 + e^(-gap/b)) is
+                        // below b * 2.1e-9, outside the reference series' domain: the maker must still cover the top.
+                        assertGe(int256(rd.makerBalance), top, "maker below the top side");
+                    }
                 }
             }
         }

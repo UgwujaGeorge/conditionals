@@ -1224,6 +1224,9 @@ contract ConditionalsFactsTest is FactsFixture {
             Facts.Round memory rd = c.getRound(id, 1);
             assertGe(rd.makerBalance, uint256(rd.q[0] > rd.q[1] ? rd.q[0] : rd.q[1]), "maker covers every side");
         }
+        // carol traded above and also pays the challenge: give her the price (capped at MAX_PRICE) so a run that
+        // drained her balance still reaches settlement.
+        imd.mint(carol, 10 ether);
         _judge(id, verdict);
         for (uint256 i; i < 3; ++i) {
             vm.prank(traders[i]);

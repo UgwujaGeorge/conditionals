@@ -8,7 +8,8 @@ import { Logo } from "./Glyphs";
 import { fmtImd, short } from "@/lib/format";
 import { chain } from "@/lib/config";
 
-export function Header({ onCreate }: { onCreate: () => void }) {
+/** The site header. On the home page the menu scrolls; elsewhere it links back to the home page's sections. */
+export function Header({ onCreate, createLabel = "Create market" }: { onCreate?: () => void; createLabel?: string }) {
   const src = useMarkets();
   const [scrolled, setScrolled] = useState(false);
 
@@ -26,32 +27,40 @@ export function Header({ onCreate }: { onCreate: () => void }) {
       }`}
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 sm:px-6">
-        <a href="#top" className="flex items-center gap-2.5">
+        <Link href="/" className="flex items-center gap-2.5">
           <Logo />
           <span className="font-display text-[1.45rem] leading-none tracking-tight">Conditionals</span>
-        </a>
+        </Link>
         {!src.live && <span className="chip hidden sm:inline-flex">Demo</span>}
-        <nav className="ml-6 hidden items-center gap-7 text-sm text-ink-2 md:flex">
-          <a href="#markets" className="transition hover:text-ink">
+        <nav className="ml-4 hidden items-center gap-6 text-sm text-ink-2 md:flex">
+          <Link href="/#markets" className="transition hover:text-ink">
             Markets
-          </a>
-          <a href="#how" className="transition hover:text-ink">
+          </Link>
+          <Link href="/wiki" className="transition hover:text-ink">
+            Encyclopedia
+          </Link>
+          <Link href="/#suggest" className="transition hover:text-ink">
+            Suggest
+          </Link>
+          <Link href="/#how" className="hidden transition hover:text-ink lg:inline">
             How it works
-          </a>
-          <a href="#imd" className="transition hover:text-ink">
+          </Link>
+          <Link href="/#imd" className="transition hover:text-ink">
             IMD
-          </a>
+          </Link>
           <Link href="/docs" className="transition hover:text-ink">
             Docs
           </Link>
         </nav>
         <div className="ml-auto flex items-center gap-2.5">
-          <Link href="/docs" className="text-sm text-ink-2 transition hover:text-ink md:hidden">
-            Docs
+          <Link href="/wiki" className="text-sm text-ink-2 transition hover:text-ink md:hidden">
+            Encyclopedia
           </Link>
-          <button onClick={onCreate} className="btn btn-ghost hidden !py-2 text-sm sm:inline-flex">
-            Create market
-          </button>
+          {onCreate && (
+            <button onClick={onCreate} className="btn btn-ghost hidden !py-2 text-sm sm:inline-flex">
+              {createLabel}
+            </button>
+          )}
           {src.connected ? (
             <button
               onClick={src.disconnect}

@@ -99,8 +99,8 @@ export function OracleIcon({ className = "" }: { className?: string }) {
       {[0, 72, 144, 216, 288].map((a) => (
         <circle
           key={a}
-          cx={12 + 9 * Math.cos((a * Math.PI) / 180)}
-          cy={12 + 9 * Math.sin((a * Math.PI) / 180)}
+          cx={(12 + 9 * Math.cos((a * Math.PI) / 180)).toFixed(3)}
+          cy={(12 + 9 * Math.sin((a * Math.PI) / 180)).toFixed(3)}
           r="1.6"
           fill="currentColor"
         />

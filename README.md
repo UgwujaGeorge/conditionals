@@ -113,6 +113,22 @@ On Robinhood Chain: IMD `0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127`, Intake
 `0xa43e6f75ee006411f79ac1c84120606c2330de82`, oracle attester `0x5598aa9146215bc13eb26f2c692ad1461fd32982`.
 The constructor makes no external calls.
 
+### ConditionalsFacts (fact markets)
+
+`src/ConditionalsFacts.sol` runs the encyclopedia's perpetual TRUE/FALSE markets, settled only by `challenge` and
+the oracle's answer. It takes the same five constructor arguments as above. Things to know before trading:
+
+- **Open rounds keep their oracle configuration.** A round uses the configuration (Intake, signer, action, price,
+  panel) that was active when it opened, and the owner cannot change it afterwards. If the protocol rotates its
+  signer or stops selling the action, a round opened before the rotation can no longer settle: its challenges stop
+  being answered (or refused), trading resumes after each `ASK_TIMEOUT`, and its traders' only exit is selling back
+  to the maker at the LMSR price. Nothing is lost outright, but a 1 IMD redemption is no longer reachable for that
+  round. This is the brief's deliberate choice (the owner cannot touch open rounds).
+- **Creator text is quoted.** The claim and the rules reach the oracle's panel in double quotes (which neither may
+  contain), and the question tells the panel they are the creator's untrusted text to judge, not instructions.
+- **Dust can always be sold.** A whole holding below 0.001 shares is sold back; when it is worth less than the
+  maker's rounding margins (a few wei) it is taken back for nothing, so it never blocks `closeRound`.
+
 ## Tests
 
 ```sh

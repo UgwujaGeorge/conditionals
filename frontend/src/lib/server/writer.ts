@@ -93,7 +93,7 @@ async function aiArticle(topic: string, facts: FactView[]): Promise<Article | nu
       body: JSON.stringify({
         model,
         temperature: 0.2,
-        max_tokens: 700,
+        max_tokens: 2000,
         messages: [
           { role: "system", content: SYSTEM },
           { role: "user", content: `Topic: ${topic}\nStatements:\n${JSON.stringify(data, null, 1)}` },

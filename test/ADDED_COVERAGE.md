@@ -63,3 +63,33 @@ Validation also completed with `forge build` and the full seeded
 11 suites. This includes the protocol conformance vectors and all three invariant suites;
 the portfolio campaign executed 20,480 handler calls without a revert. Compiler artifacts
 and local logs were directed to `test/scratch/`, which is excluded from submission.
+
+## ConditionalsFacts additions
+
+- `ConditionalsFactsInvariant.t.sol`: 256 runs of 64 random calls each, over three facts (b = 0.1, 10 and 100 IMD).
+  The calls are buys, buyFor, partial and whole sells, challenges, correctly signed answers (delivered through the
+  mock Intake under 200,000 gas), forged answers (wrong key or wrong question), failures, timeouts, closes, new
+  rounds, redemptions, withdrawals, fee-recipient rotation and a burn address that refuses IMD. Invariants:
+  - The IMD held always equals the sum of every round's makerBalance plus every `owed`.
+  - In unsettled rounds, q[i] equals the shares held. A settled round's maker holds exactly the unredeemed winning
+    shares.
+  - In live rounds, makerBalance >= C(q) >= max q[i]. C(q) comes from an independent Taylor-series reference.
+  - The spread stays <= 20b. Earlier rounds are always finished, and finished rounds never reopen.
+  - A round settles only after a valid answer to its live ask.
+  - The burn and oracle-spend totals reconcile with balances.
+  - No unexpected reverts. `afterInvariant` settles everything, pays everyone and leaves only dust.
+- `ConditionalsFactsFailurePaths.t.sol`:
+  - The oracle-consumer conformance vector, run against ConditionalsFacts itself: the protocol's digest and
+    signature, and the canonical callback and failure selectors.
+  - Binding: another fact's or another ask's question is refused. Signatures for another consumer, another chain or
+    domain version 1 are refused, and so are malformed signatures.
+  - Quorum and answer-encoding edge cases.
+  - The exact timeout boundary. Late answers and failures after a close or a re-challenge change nothing.
+  - Duplicate Intake ids are refused atomically. Price fallbacks charge nothing on refusal.
+  - Owner limits: no effect on open rounds, config validation bounds, activation-window edges, two-step ownership.
+    Fees already owed stay with the old fee recipient after a change.
+  - Lifecycle refusals.
+  - Fuzzed edges: buy spend, exact fee split, round trips never profit, settlement always covers the winners.
+  - ERC-1271 callback gas.
+- Reported, not asserted (`.imd-findings.json`): whole-holding sales of the cheap side revert `PriceLimit` once the
+  other side holds more than 20b shares beyond them.

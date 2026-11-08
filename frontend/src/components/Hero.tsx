@@ -66,6 +66,9 @@ export function Hero({ onCreate }: { onCreate: () => void }) {
             <button onClick={onCreate} className="btn btn-ghost">
               Create a market
             </button>
+            <button type="button" className="btn btn-ghost" disabled title="Airdrops are coming soon">
+              Airdrop Friends of the Swarm
+            </button>
           </div>
         </div>
       </div>

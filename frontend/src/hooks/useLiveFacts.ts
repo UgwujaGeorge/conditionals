@@ -199,7 +199,7 @@ export function useLiveFacts(): FactsSource {
       // Selling everything sends the exact holding, so no dust is left behind.
       const held = (userR.data?.[ids.indexOf(id) * 3]?.result as readonly [bigint, bigint] | undefined)?.[side] ?? 0n;
       const wei = f && shares >= f.mine[side] ? held : parseEther(shares.toFixed(18));
-      const [proceeds] = (await client!.readContract({ ...base, functionName: "quoteSell", args: [BigInt(id), side, wei] })) as readonly [bigint, bigint];
+      const [proceeds] = (await client!.readContract({ ...base, functionName: "quoteSell", args: [BigInt(id), side, wei, address!] })) as readonly [bigint, bigint];
       await run("Selling", () => write({ ...base, functionName: "sell", args: [BigInt(id), side, wei, less(proceeds)] }));
     },
     challenge: async (id) => {

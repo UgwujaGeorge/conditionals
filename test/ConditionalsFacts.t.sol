@@ -326,7 +326,7 @@ contract ConditionalsFactsTest is FactsFixture {
         uint256 id = _create();
         uint256 before = imd.balanceOf(alice);
         uint256 k = _buy(alice, id, 0, 5 ether);
-        (uint256 quoted,) = c.quoteSell(id, 0, k);
+        (uint256 quoted,) = c.quoteSell(id, 0, k, alice);
         vm.prank(alice);
         uint256 got = c.sell(id, 0, k, 0);
         assertEq(got, quoted);
@@ -823,14 +823,11 @@ contract ConditionalsFactsTest is FactsFixture {
         c.openRound(id);
     }
 
-    function test_closeRound_onlyTheSeederAndOnlyWhenEmpty() public {
+    function test_closeRound_onlyTheSeederAndTheWholeBalanceWhenEmpty() public {
         uint256 id = _create();
         uint256 k = _buy(alice, id, 0, 1 ether);
         vm.prank(alice);
         vm.expectRevert(Facts.NotSeeder.selector);
-        c.closeRound(id);
-        vm.prank(creator);
-        vm.expectRevert(Facts.StillHeld.selector);
         c.closeRound(id);
 
         vm.prank(alice);
@@ -854,6 +851,277 @@ contract ConditionalsFactsTest is FactsFixture {
         vm.prank(creator);
         vm.expectRevert(Facts.NotTrading.selector);
         c.closeRound(id);
+    }
+
+    // ---- review findings (revision) -------------------------------------------------------------------------------
+
+    /// @dev Leaves `who` holding `keep` wei of `side` (buy the minimum, sell the rest).
+    function _dust(address who, uint256 id, uint8 side, uint256 keep) internal {
+        uint256 k = _buy(who, id, side, 1e15);
+        vm.prank(who);
+        c.sell(id, side, k - keep, 0);
+        assertEq(c.sharesOf(id, c.getFact(id).rounds, who)[side], keep);
+    }
+
+    /// @dev Closes the current round as its seeder, checks the refund, and has every holder redeem 1 IMD per share.
+    function _closeAndRedeem(uint256 id) internal {
+        uint32 round = c.getFact(id).rounds;
+        Facts.Round memory r = c.getRound(id, round);
+        uint256 held = uint256(r.q[0]) + uint256(r.q[1]);
+        uint256 before = imd.balanceOf(r.seeder);
+        vm.prank(r.seeder);
+        uint256 refund = c.closeRound(id);
+        assertEq(refund, r.makerBalance > held ? r.makerBalance - held : 0);
+        if (r.makerBalance >= held) assertEq(imd.balanceOf(r.seeder) - before, refund);
+        else assertEq(before - imd.balanceOf(r.seeder), held - r.makerBalance, "the seeder pays in the shortfall");
+        assertEq(uint8(_phase(id, round)), uint8(Facts.Phase.Closed));
+        assertEq(c.getRound(id, round).makerBalance, held);
+        address[4] memory who = [alice, bob, carol, creator];
+        for (uint256 i; i < who.length; ++i) {
+            uint256[2] memory sh = c.sharesOf(id, round, who[i]);
+            assertEq(c.redeemable(id, round, who[i]), sh[0] + sh[1]);
+            uint256 bal = imd.balanceOf(who[i]);
+            vm.prank(who[i]);
+            assertEq(c.redeem(id, round), sh[0] + sh[1]);
+            assertEq(imd.balanceOf(who[i]) - bal, sh[0] + sh[1], "1 IMD per share of either side");
+            assertEq(c.redeemable(id, round, who[i]), 0);
+        }
+        assertEq(c.getRound(id, round).makerBalance, 0);
+        _drain();
+    }
+
+    /// @dev Review 391b6d94 (a): 1 wei of TRUE and a panel that disagrees used to lock the seed. The seeder now closes
+    ///      the round, the dust holder redeems 1 wei, and the seeder takes back the rest.
+    function test_review_dustAndADisagreeingPanelNoLongerLockTheSeed() public {
+        vm.prank(creator);
+        uint256 id = c.createFact(TOPIC, CLAIM, RULES, 100 ether);
+        _dust(alice, id, 0, 1);
+        AskRef memory ref = _challenge(creator, id);
+        assertTrue(intake.fail(ref.requestId, 2, "disagreed"));
+        assertEq(uint8(_phase(id, 1)), uint8(Facts.Phase.Open));
+        assertGe(c.getRound(id, 1).makerBalance, c.getRound(id, 1).seed);
+        // The refund (makerBalance - 1) is checked inside.
+        _closeAndRedeem(id);
+        // Anyone can open the next round.
+        vm.prank(bob);
+        assertEq(c.openRound(id), 2);
+    }
+
+    /// @dev Review 391b6d94 (b, c): the Intake prices the action above MAX_PRICE, or stops selling it. challenge
+    ///      cannot ask, and the seeder still closes.
+    function test_review_seederClosesWhenTheIntakeCannotBeAsked() public {
+        uint256 id = _create();
+        _dust(alice, id, 1, 1e14);
+        intake.setPrice(10 ether + 1);
+        vm.prank(creator);
+        vm.expectRevert(abi.encodeWithSelector(Facts.PriceTooHigh.selector, 10 ether + 1, 10 ether));
+        c.challenge(id, 100 ether);
+        intake.setPrice(0);
+        vm.prank(creator);
+        vm.expectRevert(bytes("ActionNotSold"));
+        c.challenge(id, 100 ether);
+        _closeAndRedeem(id);
+    }
+
+    /// @dev Review 391b6d94 (d) and audit 47085a40: the signer rotates; the round keeps config 0, its answers can no
+    ///      longer verify, and the seeder still closes it, its holders taking 1 IMD per share.
+    function test_review_seederClosesARoundPinnedToARotatedSigner() public {
+        uint256 id = _create();
+        uint256 kTrue = _buy(alice, id, 0, 3 ether);
+        uint256 kFalse = _buy(bob, id, 1, 1 ether);
+        Facts.OracleConfig memory config = c.oracleConfig();
+        config.signer = vm.addr(0xB0B);
+        vm.prank(owner);
+        c.proposeOracleConfig(config);
+        vm.warp(block.timestamp + 3 days);
+        vm.prank(owner);
+        c.activateOracleConfig();
+        assertEq(c.configCount(), 2);
+        assertEq(c.getRound(id, 1).configId, 0);
+
+        AskRef memory ref = _challenge(carol, id);
+        IOracleAttestation.Attestation memory a = _attestation(id, ref, true);
+        assertFalse(_deliver(ref, a, _sign(a, 0xB0B)), "the new signer's answer does not verify for round 1");
+        vm.warp(block.timestamp + 1 days);
+        assertTrue(c.trading(id));
+        uint256 aliceBefore = imd.balanceOf(alice);
+        uint256 bobBefore = imd.balanceOf(bob);
+        _closeAndRedeem(id);
+        assertEq(imd.balanceOf(alice) - aliceBefore, kTrue);
+        assertEq(imd.balanceOf(bob) - bobBefore, kFalse);
+    }
+
+    /// @dev Review 391b6d94: with both sides held deeply, 1 IMD per share is more than the maker holds; the seeder pays
+    ///      in the difference. An answer to an ask the round timed out on is ignored after the close.
+    function test_review_closeWithBothSidesHeldTakesTheShortfallFromTheSeeder() public {
+        uint256 id = _create();
+        _buy(alice, id, 0, 40 ether);
+        _buy(bob, id, 1, 40 ether);
+        Facts.Round memory r = c.getRound(id, 1);
+        assertGt(uint256(r.q[0]) + uint256(r.q[1]), r.makerBalance);
+        AskRef memory ref = _challenge(carol, id);
+        IOracleAttestation.Attestation memory a = _attestation(id, ref, true);
+        bytes memory sig = _sign(a, signerKey);
+        vm.warp(block.timestamp + 1 days);
+        _closeAndRedeem(id);
+        vm.warp(a.issuedAt);
+        assertTrue(_deliver(ref, a, sig), "ignored, not refused");
+        assertEq(uint8(_phase(id, 1)), uint8(Facts.Phase.Closed));
+        assertEq(c.getFact(id).verdict, 0);
+    }
+
+    function test_review_closeIsStillRefusedWhileAnAskIsLive() public {
+        uint256 id = _create();
+        _dust(alice, id, 0, 1);
+        _challenge(carol, id);
+        vm.prank(creator);
+        vm.expectRevert(Facts.NotTrading.selector);
+        c.closeRound(id);
+        vm.prank(alice);
+        vm.expectRevert(Facts.NotSettled.selector);
+        c.redeem(id, 1);
+    }
+
+    /// @dev Review 391b6d94: random trades, then the seeder closes; every holder redeems 1 IMD per share and the
+    ///      contract is left solvent with only dust.
+    /// forge-config: default.fuzz.runs = 256
+    function testFuzz_review_closeWithHoldingsIsSolvent(uint256 seed, uint8 steps, uint64 b) public {
+        uint256 liquidity = bound(b, 0.1 ether, 100 ether);
+        vm.prank(creator);
+        uint256 id = c.createFact(TOPIC, CLAIM, RULES, liquidity);
+        address[3] memory traders = [alice, bob, carol];
+        uint256 n = bound(steps, 1, 20);
+        for (uint256 i; i < n; ++i) {
+            uint256 r = uint256(keccak256(abi.encode(seed, i)));
+            address who = traders[r % 3];
+            uint8 side = uint8((r >> 8) % 2);
+            if ((r >> 16) % 3 == 0) {
+                uint256 held = c.sharesOf(id, 1, who)[side];
+                if (held == 0) continue;
+                vm.prank(who);
+                try c.sell(id, side, bound(r >> 24, 1, held), 0) {} catch {}
+            } else {
+                vm.prank(who);
+                try c.buy(id, side, bound(r >> 24, 1e15, 10 * liquidity), 0) {} catch {}
+            }
+        }
+        // Enough for any shortfall the seeder has to pay in.
+        imd.mint(creator, 100_000 ether);
+        _closeAndRedeem(id);
+    }
+
+    /// @dev Review d0a32209: a live price above MAX_PRICE is reported as it is and refused by challenge, instead of
+    ///      substituting the configured price the Intake would refuse.
+    function test_review_livePriceAboveTheCapIsRefused() public {
+        uint256 id = _create();
+        intake.setPrice(10 ether + 1);
+        assertEq(c.challengePrice(id), 10 ether + 1);
+        vm.prank(carol);
+        vm.expectRevert(abi.encodeWithSelector(Facts.PriceTooHigh.selector, 10 ether + 1, 10 ether));
+        c.challenge(id, 100 ether);
+        intake.setPrice(10 ether);
+        uint256 before = imd.balanceOf(carol);
+        vm.prank(carol);
+        c.challenge(id, 100 ether);
+        assertEq(before - imd.balanceOf(carol), 10 ether, "the live price, at the cap");
+    }
+
+    /// @dev The reviewer's state for 784273c5: b = 0.1, q = [2.43, 1.61] (gap 8.3 b).
+    function _spreadState() internal returns (uint256 id, uint256 kb) {
+        vm.prank(creator);
+        id = c.createFact(TOPIC, CLAIM, RULES, 0.1 ether);
+        _buy(alice, id, 0, 1.8 ether);
+        kb = _buy(bob, id, 1, 0.01 ether);
+        _buy(alice, id, 0, 0.6 ether);
+        Facts.Round memory r = c.getRound(id, 1);
+        assertGt(r.q[0] - 20 * 0.1 ether, 0, "selling all of FALSE leaves a gap above 20 b");
+    }
+
+    /// @dev Review 784273c5: the cheaper side's whole holding sold, though the sale leaves a gap above 20 b. The quote
+    ///      matches, and the maker still covers C(q) and every side.
+    function test_review_minoritySideSellsPastTheSpreadCap() public {
+        (uint256 id, uint256 kb) = _spreadState();
+        (uint256 quoted,) = c.quoteSell(id, 1, kb, bob);
+        vm.prank(bob);
+        uint256 got = c.sell(id, 1, kb, 0);
+        assertEq(got, quoted);
+        Facts.Round memory r = c.getRound(id, 1);
+        assertEq(r.q[1], 0);
+        assertGe(r.makerBalance, uint256(r.q[0]));
+        // Purchases are still held to the cap: more TRUE is refused, FALSE can be bought back.
+        vm.prank(alice);
+        vm.expectRevert(Facts.PriceLimit.selector);
+        c.buy(id, 0, 0.01 ether, 0);
+        _buy(bob, id, 1, 0.5 ether);
+        _judge(id, true);
+        vm.prank(alice);
+        c.redeem(id, 1);
+        _drain();
+    }
+
+    /// @dev Review 784273c5: partial sales of the cheaper side in a round at exactly the cap's edge go through.
+    function test_review_minoritySideSellsPartOfItsHolding() public {
+        (uint256 id, uint256 kb) = _spreadState();
+        vm.startPrank(bob);
+        c.sell(id, 1, kb / 2, 0);
+        c.sell(id, 1, kb - kb / 2, 0);
+        vm.stopPrank();
+        assertEq(c.getRound(id, 1).q[1], 0);
+    }
+
+    /// @dev Review 3ad6afbd: quoteSell agrees with sell for a whole dust holding (0), refuses a partial dust sale and
+    ///      a sale of more than the account holds, as sell does.
+    function test_review_quoteSellAgreesWithSell() public {
+        uint256 id = _create();
+        _dust(alice, id, 0, 10);
+        (uint256 proceeds, uint256 fee) = c.quoteSell(id, 0, 10, alice);
+        assertEq(proceeds, 0);
+        assertEq(fee, 0);
+        vm.expectRevert(Facts.TradeTooSmall.selector);
+        c.quoteSell(id, 0, 9, alice);
+        vm.expectRevert(Facts.TradeTooSmall.selector);
+        c.quoteSell(id, 0, 11, alice);
+        vm.expectRevert(Facts.TradeTooLarge.selector);
+        c.quoteSell(id, 0, 1e15, alice);
+        vm.expectRevert(Facts.TradeTooSmall.selector);
+        c.quoteSell(id, 0, 10, bob);
+        vm.startPrank(alice);
+        vm.expectRevert(Facts.TradeTooSmall.selector);
+        c.sell(id, 0, 9, 0);
+        vm.expectRevert(Facts.TradeTooSmall.selector);
+        c.sell(id, 0, 11, 0);
+        vm.expectRevert(Facts.TradeTooLarge.selector);
+        c.sell(id, 0, 1e15, 0);
+        assertEq(c.sell(id, 0, 10, 0), 0);
+        vm.stopPrank();
+        vm.expectRevert(Facts.InvalidChoice.selector);
+        c.quoteSell(id, 2, 10, alice);
+    }
+
+    /// @dev Review 3ad6afbd: for any holding and any amount, quoteSell succeeds exactly when sell does and quotes what
+    ///      sell pays.
+    /// forge-config: default.fuzz.runs = 256
+    function testFuzz_review_quoteSellMatchesSell(uint256 spend, uint256 amount, bool falseSide, uint64 b) public {
+        uint256 liquidity = bound(b, 0.1 ether, 100 ether);
+        vm.prank(creator);
+        uint256 id = c.createFact(TOPIC, CLAIM, RULES, liquidity);
+        uint8 side = falseSide ? 1 : 0;
+        _buy(bob, id, 1 - side, bound(spend >> 128, 1e15, 3 * liquidity));
+        uint256 k = _buy(alice, id, side, bound(spend, 1e15, 3 * liquidity));
+        amount = bound(amount, 0, k + 1);
+        bool quoted;
+        uint256 q;
+        try c.quoteSell(id, side, amount, alice) returns (uint256 p, uint256) {
+            quoted = true;
+            q = p;
+        } catch {}
+        vm.prank(alice);
+        try c.sell(id, side, amount, 0) returns (uint256 got) {
+            assertTrue(quoted, "sell succeeded where the quote reverted");
+            assertEq(got, q);
+        } catch {
+            assertFalse(quoted, "the quote succeeded where sell reverted");
+        }
     }
 
     // ---- owner -----------------------------------------------------------------------------------------------------

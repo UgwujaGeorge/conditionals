@@ -3504,6 +3504,11 @@ export const factsAbi = [
         "name": "shares",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [
@@ -4428,11 +4433,6 @@ export const factsAbi = [
   {
     "type": "error",
     "name": "SlippageExceeded",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "StillHeld",
     "inputs": []
   },
   {

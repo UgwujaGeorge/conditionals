@@ -63,3 +63,50 @@ Validation also completed with `forge build` and the full seeded
 11 suites. This includes the protocol conformance vectors and all three invariant suites;
 the portfolio campaign executed 20,480 handler calls without a revert. Compiler artifacts
 and local logs were directed to `test/scratch/`, which is excluded from submission.
+
+## ConditionalsFacts additions
+
+- `ConditionalsFactsInvariant.t.sol`: 256 runs of 64 random calls each, over three facts (b = 0.1, 10 and 100 IMD).
+  The calls are buys, buyFor, partial and whole sells, challenges, correctly signed answers (delivered through the
+  mock Intake under 200,000 gas), forged answers (wrong key or wrong question), failures, timeouts, closes, new
+  rounds, redemptions, withdrawals, fee-recipient rotation and a burn address that refuses IMD. Invariants:
+  - The IMD held always equals the sum of every round's makerBalance plus every `owed`.
+  - In unsettled rounds, q[i] equals the shares held. A settled round's maker holds exactly the unredeemed winning
+    shares.
+  - In live rounds, makerBalance >= C(q) >= max q[i]. C(q) comes from an independent Taylor-series reference.
+  - The spread stays <= 20b. Earlier rounds are always finished, and finished rounds never reopen.
+  - A round settles only after a valid answer to its live ask.
+  - The burn and oracle-spend totals reconcile with balances.
+  - No unexpected reverts. `afterInvariant` settles everything, pays everyone and leaves only dust.
+- `ConditionalsFactsFailurePaths.t.sol`:
+  - The oracle-consumer conformance vector, run against ConditionalsFacts itself: the protocol's digest and
+    signature, and the canonical callback and failure selectors.
+  - Binding: another fact's or another ask's question is refused. Signatures for another consumer, another chain or
+    domain version 1 are refused, and so are malformed signatures.
+  - Quorum and answer-encoding edge cases.
+  - The exact timeout boundary. Late answers and failures after a close or a re-challenge change nothing.
+  - Duplicate Intake ids are refused atomically. Price fallbacks charge nothing on refusal.
+  - Owner limits: no effect on open rounds, config validation bounds, activation-window edges, two-step ownership.
+    Fees already owed stay with the old fee recipient after a change.
+  - Lifecycle refusals.
+  - Fuzzed edges: buy spend, exact fee split, round trips never profit, settlement always covers the winners.
+  - ERC-1271 callback gas.
+- Earlier report (cheap-side sales refused `PriceLimit` past 20b): fixed in the implementation, since sales are no
+  longer held to MAX_SPREAD_B. The invariant now checks that every successful purchase leaves the spread within
+  20b. Where a sale has widened the spread past the reference series' domain, it checks that the maker covers the
+  top side.
+
+## Revision (after implementation commit d262ee8)
+
+- `testFuzz_conservation`: carol both trades and pays the challenge, so she is now minted the price before `_judge`.
+  Previously a seed that drained her failed with `ERC20InsufficientBalance`.
+- Updated to the implementation's new rules:
+  - A live price above MAX_PRICE: `challenge` reverts `PriceTooHigh(price, min(maxPrice, MAX_PRICE))`.
+  - A closed round redeems every share held, of either side.
+  - `closeRound` works while shares are held: the seeder takes the surplus back or pays in the shortfall.
+- Invariants follow the same rules: a closed round's maker equals the shares still held, the close handler checks
+  the refund and the shortfall, and the final drain redeems closed rounds.
+- New unit tests: close with shares held (surplus and shortfall), and a seeder who cannot pay the shortfall cannot
+  close.
+- Reported, not asserted (`.imd-findings.json`): closing with shares outstanding departs from the brief, which allows
+  a close only while no shares are outstanding and makes the seed the seeder's maximum loss.

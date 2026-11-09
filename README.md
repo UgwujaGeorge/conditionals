@@ -113,6 +113,33 @@ On Robinhood Chain: IMD `0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127`, Intake
 `0xa43e6f75ee006411f79ac1c84120606c2330de82`, oracle attester `0x5598aa9146215bc13eb26f2c692ad1461fd32982`.
 The constructor makes no external calls.
 
+### ConditionalsFacts (fact markets)
+
+`src/ConditionalsFacts.sol` runs the encyclopedia's perpetual TRUE/FALSE markets, settled only by `challenge` and
+the oracle's answer. It takes the same five constructor arguments as above. Things to know before trading:
+
+- **Open rounds keep their oracle configuration.** A round uses the configuration (Intake, signer, action, price,
+  panel) that was active when it opened, and the owner cannot change it afterwards. If the protocol rotates its
+  signer or stops selling the action, a round opened before the rotation can no longer settle by challenge: its
+  challenges stop being answered (or refused), and trading resumes after each `ASK_TIMEOUT`. Its traders can still
+  sell back to the maker, and its seeder can still end it with `closeRound` (next point).
+- **The seeder can always close a trading round.** `closeRound` works whenever the round trades (not while a
+  challenge waits for its answer). Every share still held, of either side, then redeems for 1 IMD with `redeem`, and
+  the seeder gets the rest of the maker's balance. If the balance is short of 1 IMD per share, the seeder pays in the
+  difference and gets nothing back. With no shares held the whole balance comes back, as before. So a dust holder, a
+  panel that keeps disagreeing, an Intake price above `MAX_PRICE` or a rotated signer cannot lock a seed. Holders
+  never get less than the best a verdict could pay them.
+- **The oracle price is capped.** `challenge` pays the Intake's live price. It refuses (`PriceTooHigh`) a price above
+  the caller's `maxPrice` or above `MAX_PRICE` (10 IMD). `challengePrice` reports the live price as it is.
+- **Sales are not held to the spread limit.** A purchase cannot leave the two sides more than 20 b apart. A sale only
+  lowers C(q), so it may, and the cheaper side's holders can always sell.
+- **Quotes match trades.** `quoteSell(factId, side, shares, account)` runs `sell`'s checks for that account. It
+  reverts where `sell` would, and quotes 0 for a whole dust holding that `sell` takes back for nothing.
+- **Creator text is quoted.** The claim and the rules reach the oracle's panel in double quotes (which neither may
+  contain), and the question tells the panel they are the creator's untrusted text to judge, not instructions.
+- **Dust can always be sold.** A whole holding below 0.001 shares is sold back; when it is worth less than the
+  maker's rounding margins (a few wei) it is taken back for nothing.
+
 ## Tests
 
 ```sh

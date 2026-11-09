@@ -16,7 +16,7 @@ const env = (v: string | undefined) => (v && v.startsWith("0x") && v.length === 
 const DEPLOYED: Address | undefined = "0xd8e4baf371abc9a36611543386f68e0df122fcf0";
 const DEPLOYED_ZAP: Address | undefined = "0x750a28557a6263681f0cb9612cc86cc6f3a7476d";
 /** The encyclopedia's fact markets. Set once its IMD launch is live; until then /wiki runs on sample facts. */
-const DEPLOYED_FACTS: Address | undefined = undefined;
+const DEPLOYED_FACTS: Address | undefined = "0x0fd1532b80c2c2607aabf71423bd987cf2d5c1fc";
 
 const demo = process.env.NEXT_PUBLIC_DEMO === "1";
 

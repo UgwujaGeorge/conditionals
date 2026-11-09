@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { ForkCanvas } from "./ForkCanvas";
 import { ArrowIcon, Logo } from "./Glyphs";
 import { useMarkets } from "./Providers";
@@ -66,9 +68,9 @@ export function Hero({ onCreate }: { onCreate: () => void }) {
             <button onClick={onCreate} className="btn btn-ghost">
               Create a market
             </button>
-            <button type="button" className="btn btn-ghost" disabled title="Airdrops are coming soon">
+            <Link href="/airdrop" className="btn btn-ghost">
               Airdrop Friends of the Swarm
-            </button>
+            </Link>
           </div>
         </div>
       </div>

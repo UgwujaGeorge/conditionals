@@ -1,0 +1,274 @@
+{
+ "title": "Airdrop Friends of the Swarm #1",
+ "token": "0x118B0068667CB2ac01437d53B8A9929d56556045",
+ "snapshotBlock": 109656177,
+ "rule": "Wallets holding 100,000 CONDITION or more at the snapshot, contracts and the team wallet excluded. IMD shared in proportion to holdings.",
+ "totalImd": "30.747602140256684456",
+ "swapTx": "0xc9d1f605c792371a848e5cc01a6dc20378b87ccb8c52aee555c2219be03441a0",
+ "recipients": [
+  {
+   "address": "0xaf849e7a0de1b8da146b415dc5733a644bb1cfc8",
+   "condition": "31232141.620833",
+   "imd": "3.2362413810708475",
+   "tx": "0xcd3603f288654d9d69b8a426728af6e62097dc2a7a95625816d9128428455cd1"
+  },
+  {
+   "address": "0x7e07220a5a75ecc93f2d289e17156935b2bd7084",
+   "condition": "29475530.138611663",
+   "imd": "3.054223162844119",
+   "tx": "0xe5c5cc18998c7e81ca2bb27cf6c0c3d784d3dbd15aef86e8cc229dd71f827bdd"
+  },
+  {
+   "address": "0x8cfe8cf34a507d0c8a2608be1e523bced890b1c4",
+   "condition": "29370909.073587608",
+   "imd": "3.0433824390771416",
+   "tx": "0x3c7229d38f70468397a443c59b6759ec550a9b3a382be25f79374626e7b33965"
+  },
+  {
+   "address": "0xec9c25bd1db76bd8ddcaaebb101ea8e6b1b532ab",
+   "condition": "28634742.822630007",
+   "imd": "2.967101673139925",
+   "tx": "0xa0ef6174eeb8fd099e2e9d7e4a14300e36aa66a00bed36d819376f2f722c621b"
+  },
+  {
+   "address": "0x331737f20c12136c39605e173b74587254f6db68",
+   "condition": "25381450.30330791",
+   "imd": "2.629998953653806",
+   "tx": "0xf045ae2b21319c0a9b665a3951239b460d14eae60c537a73379a9498ae405b99"
+  },
+  {
+   "address": "0xaa370a1e6d91585e435b500f08a3b86d761cec98",
+   "condition": "20690623.58249061",
+   "imd": "2.143940465265813",
+   "tx": "0xbfd970f651bf8273314f8f7c73ca2c1bbdea14c8ec5ade1ff875612e0c96021a"
+  },
+  {
+   "address": "0xc5952f395da07a8981f3daf99d740ba45b65081b",
+   "condition": "20690623.58249061",
+   "imd": "2.143940465265813",
+   "tx": "0xa65bccf96339d0872af520f932db8a5793844a0ed82b54be985f50e56a16a7cb"
+  },
+  {
+   "address": "0xf86a7c853b60c36f79f6e1de0e7868d109e97004",
+   "condition": "14595157.091736838",
+   "imd": "1.5123346940768845",
+   "tx": "0x3ac9fbc5a1483d0c5704ab7566307aa33d7370e81e358ed53490a3bcdac39c06"
+  },
+  {
+   "address": "0x60e2809a42790565f58557bf114d85157da41602",
+   "condition": "11194586.836220536",
+   "imd": "1.1599712118109184",
+   "tx": "0xd57aeb8d5a33f9f51c4aa0d1de61905cd7b760bfe986f27f660effa4698db7f0"
+  },
+  {
+   "address": "0xb583684e7b9c2e2de312c615ba8c03a63fb5d65e",
+   "condition": "10676364.271994542",
+   "imd": "1.1062735394798566",
+   "tx": "0x456b17d77d482e203d45e017d5515091ede0ea2637a2a3c454e7575c0f47e6c5"
+  },
+  {
+   "address": "0xd8594d04803de02dfeee4e48a71e5b635ed5d594",
+   "condition": "9875528.742032556",
+   "imd": "1.0232918114588099",
+   "tx": "0x00a1fafc7f465a11c7bd12fa55b0eee65be8d68766dd4004bce61049fce6f749"
+  },
+  {
+   "address": "0xca5b9a7aad9f97ecdf3bb267de1f811359236f8a",
+   "condition": "8268176.404927456",
+   "imd": "0.8567396675023838",
+   "tx": "0xe6618ade91e549777d83bea1a44d0e6f715c131e4827705e4ba82c68e455a0ee"
+  },
+  {
+   "address": "0x5d309f1fd824d41074dc5d8a9ed17508ab49eccf",
+   "condition": "6871702.073225145",
+   "imd": "0.7120384787486893",
+   "tx": "0x7fa7920dbef7e0415452801af00992380e61e3fbaed82f55033e93287dc3f73e"
+  },
+  {
+   "address": "0x6db81322bd24f617470667df2d35ee256a8c13f2",
+   "condition": "6443140.916454986",
+   "imd": "0.6676314263378469",
+   "tx": "0x89f106865a1d6ff07bdca4fcbffc8e92f2e6d61ecca6e773004b93d088d91789"
+  },
+  {
+   "address": "0x0a9397203fca5ce6a488381fc75c63a09d821f18",
+   "condition": "5208627.237828733",
+   "imd": "0.5397124286344253",
+   "tx": "0xe1ab6cacacb6f9a52f606a2d550ed03660c1569bb1e6c5434d9dafc96afb2787"
+  },
+  {
+   "address": "0x994bec5d3de7455bd8702dddde520df4e94d424b",
+   "condition": "5083812.9170270255",
+   "imd": "0.5267793011264704",
+   "tx": "0xf8ea65bdc43ea6c557a7176a016942b1bd8714b13283c4b4c894dfcad1a79fab"
+  },
+  {
+   "address": "0x72e007c619bccaad14cfc555b4ec2df185e1ea0f",
+   "condition": "2544276.1555283205",
+   "imd": "0.26363519605393587",
+   "tx": "0x8d074fd11d2ad20241424c0d5dbfb89543f68d540e681ead5aa28e967f64685d"
+  },
+  {
+   "address": "0x5bc03cf56bd1c34bc6b55c42bf4adc6f90146db1",
+   "condition": "2388822.3951416197",
+   "imd": "0.24752724232107573",
+   "tx": "0x25c6b7454e3a9a6fa275cf36939d0ea9da269b9e4e22c7b70a6dd008730b6d0f"
+  },
+  {
+   "address": "0xd28ddf1474d18c97dba85b1d4927a48073be71ee",
+   "condition": "2289455.7646612576",
+   "imd": "0.23723097748717073",
+   "tx": "0x1f25392b7e81340fb1111bc2c9638b4918884855219b7642a32f21e87ed1a469"
+  },
+  {
+   "address": "0xa0c8b89a092d77d51f551d1a2d92e31febd64800",
+   "condition": "1965185.9697030648",
+   "imd": "0.20363048534624553",
+   "tx": "0x40c5d098a8d5feb50179ceb6ea72aee6ff1f1660be04eb6d051bb26f03c738c0"
+  },
+  {
+   "address": "0x79f747ae0ac78431c4dd143f560c37dae7956d61",
+   "condition": "1809216.5783990864",
+   "imd": "0.1874691024847617",
+   "tx": "0xb94d1953825241fd9672c93829e6fe3b8022234f51294f1aee90394a054b600e"
+  },
+  {
+   "address": "0x552c6be6ab811c6319b3b9bd2f4257d443ed51f2",
+   "condition": "1745694.6039322226",
+   "imd": "0.18088702287995273",
+   "tx": "0x4f86c68a9e8b61e1ea9202e83dca0757fe4f6e04b9a8ed773ab8ffb5aa10e192"
+  },
+  {
+   "address": "0x63784c9ab90b2af45fc7df3284f9b6bf26176593",
+   "condition": "1694892.2866373924",
+   "imd": "0.1756229406572289",
+   "tx": "0x97545d057a138b09c998149c4542e5e51e00d65222e83788270fcd6f28acd47c"
+  },
+  {
+   "address": "0x7528c73a655f0ad7efd08ddac9878a66f09815c9",
+   "condition": "1667836.468779414",
+   "imd": "0.17281944551386988",
+   "tx": "0x85a415349211c2798b4fa33985bddcc18b2d855641dd9403df7b9572149afc5a"
+  },
+  {
+   "address": "0xcf076370c5c2bf56c8dde56c49bc3cf2416883d9",
+   "condition": "1536016.0004100464",
+   "imd": "0.15916034842766405",
+   "tx": "0x790ad88ee026d66d114b05e8477d0b770c581eacec056d9a97dd4da055845c25"
+  },
+  {
+   "address": "0xfa6fa5d8cfd358c25a562adf9174a4f365539e2e",
+   "condition": "1521291.5525420373",
+   "imd": "0.15763461676051235",
+   "tx": "0x93a37a20f6ef0175fe43776bead9bfb76817cf50182025adbc1a54e10ae5a39f"
+  },
+  {
+   "address": "0x3e032018dfc3726f716c475d41fa7f047eaf3d0a",
+   "condition": "1484856.4103573516",
+   "imd": "0.15385924598079523",
+   "tx": "0xffa9acada157d944dc979ac7528b674f113d50fb435d0e12acf6a60f912436f8"
+  },
+  {
+   "address": "0xd92c67fb540d3047724657577317dd1f692dbaf5",
+   "condition": "1245526.5788519664",
+   "imd": "0.1290601427414003",
+   "tx": "0x83c91b26461ca6041b52045bc79bcb9fc327f77b76fd94a18c959c069251fdad"
+  },
+  {
+   "address": "0x9351ec274ac7dc6887bfbeac6a2c3ee5ebebf1c9",
+   "condition": "1134790.629887461",
+   "imd": "0.11758580118769663",
+   "tx": "0xdd2d0edfbb12e72dd9ad20fc79c6c50d482e5fe00a2cc165f2b6f622f76901b6"
+  },
+  {
+   "address": "0x3bb9ffd92aaded042aeb4d7ded327d4e6b833a17",
+   "condition": "1103893.1680303314",
+   "imd": "0.1143842389686843",
+   "tx": "0x38f59fe951934eb07229d77dbe8f7cc81b6a331d09313f479a77159341981d9c"
+  },
+  {
+   "address": "0x88e5f16f623f0d7785227e8ca4b672cabbaa3148",
+   "condition": "1020697.690622867",
+   "imd": "0.10576361186047513",
+   "tx": "0xf715e6e6e97113a405c2daa8a4da98ca1f08a937d8567a69e4f404b218907f25"
+  },
+  {
+   "address": "0xfa498eed86ea38258252bec3980047d2481742db",
+   "condition": "910136.9038278266",
+   "imd": "0.09430742042494468",
+   "tx": "0x9c989178b242b6ef745b55c6f4c8093ae7300cbda9bc06f10733b5681846563c"
+  },
+  {
+   "address": "0x5b783b827d9cb8a9ad06630d9922203379314a3b",
+   "condition": "897888.0512325703",
+   "imd": "0.09303820731363617",
+   "tx": "0x05ee9e1dc6c61fce9ab65a8ccef701fe5da0a9d006667f12c22c64338b956026"
+  },
+  {
+   "address": "0x97e9aa68b402bc26b448d8c0836fc0263b5afd6d",
+   "condition": "869268.579112545",
+   "imd": "0.0900726879744997",
+   "tx": "0xa5cd3c569b1b41ccd1042171276c73c379e19e216cfad67ee0ec995fd1476a8b"
+  },
+  {
+   "address": "0xd3cb05df45f1e51ebf556bae8fe1b5a01a7e35a4",
+   "condition": "811613.1307499603",
+   "imd": "0.08409849158091234",
+   "tx": "0x88d6e3548b194adb93240057985ae7adbbf3d7890f84ccb8dfc957409ef2edfb"
+  },
+  {
+   "address": "0x172ec29caedffb83ec8b0abda935da9f30f6b9f2",
+   "condition": "803595.6558658677",
+   "imd": "0.08326772933903363",
+   "tx": "0x9922147c020c93b9cd49b3d7f8a9c119cb82e585ee23c14d057b652d54584ecf"
+  },
+  {
+   "address": "0xe0cd5b1074038ae0cece5de466db886464f5c1ea",
+   "condition": "666623.0627997213",
+   "imd": "0.06907477455755431",
+   "tx": "0x387e803f18df18d8c14e6bb56f2773fa1658e43a6f8a33d9b9c4518f5cc190c5"
+  },
+  {
+   "address": "0x59a5c60467e64f69daca7648cf25a7ab2609ec37",
+   "condition": "651079.965471949",
+   "imd": "0.06746421530187408",
+   "tx": "0x22b7c63c595ac88930f21abe60d96562b412786d5406ae7c96cdd24660a0c174"
+  },
+  {
+   "address": "0x69e34067ac265a1d36269d8fc292c4a5b043b137",
+   "condition": "637197.7452377565",
+   "imd": "0.06602575436863263",
+   "tx": "0x3c5249cbb6fbdd9d4ae95acd41bb039d2998c8c0850cf9b9fbff1d2eed3d124c"
+  },
+  {
+   "address": "0x4cfdb2edf0a27eef008643973d473260a17bcb5a",
+   "condition": "565176.3147193091",
+   "imd": "0.058562970144695636",
+   "tx": "0xb86896e0476f54283e2ae9570a3cd26e2a671d8a37dc5f004c13c3a48efcd41b"
+  },
+  {
+   "address": "0xe3d001173d5c3543aad4e518a659addcd865088e",
+   "condition": "475564.20939935674",
+   "imd": "0.04927745885949245",
+   "tx": "0x38434a38391bcd4090d65b84100daeac3350a93a4a3382957a71c1fcf0eecfef"
+  },
+  {
+   "address": "0x82d0932ae37a6b04066564030bedf80efb6c667f",
+   "condition": "312360.1977106187",
+   "imd": "0.03236643230883296",
+   "tx": "0x859c963ecce36319fa96647114c39da3a9d7a573e3963972982c2a544cd49021"
+  },
+  {
+   "address": "0x9bf359e04051a085b74e2e9e8f89ecbd104e756a",
+   "condition": "179090.63169388263",
+   "imd": "0.018557181261731327",
+   "tx": "0xdfbcaac7e41d8107afcd37ce71fce0b8b6e4e474a1e022f465e367e4be295fae"
+  },
+  {
+   "address": "0xd2fcefe2ae92ce157016ef5f37407a22b36d06c3",
+   "condition": "112115.59155823446",
+   "imd": "0.011617298655625094",
+   "tx": "0xccdb154411a4aa9c38e2a5d5bb5d52f75cd977ca94782524d62246829ca2eede"
+  }
+ ]
+}

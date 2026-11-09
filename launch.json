@@ -1,0 +1,16 @@
+{
+  "kind": "evm_contracts",
+  "contracts": [
+    {
+      "contract": "ConditionalsFacts",
+      "constructorArgs": [
+        "$owner",
+        "0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127",
+        "0xa43e6f75ee006411f79ac1c84120606c2330de82",
+        "0x5598aa9146215bc13eb26f2c692ad1461fd32982",
+        "0x63bcf2d1483c7628d7d53704ff9c8199dc28d907"
+      ]
+    }
+  ],
+  "notes": "Deploy only src/ConditionalsFacts.sol:ConditionalsFacts on Robinhood Chain. It provides perpetual TRUE/FALSE LMSR markets in IMD, settled through IdentityMD oracle challenges. Constructor arguments are owner, IMD, Intake v2, oracle signer and fee recipient, in declaration order. Ownership is assigned to $owner. The owner can add oracle configurations for future rounds after a 3-day delay, with a 7-day activation window, and set the fee recipient."
+}
